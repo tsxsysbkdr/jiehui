@@ -1,4 +1,4 @@
-﻿// 劫灰 · 规则引擎 v8（浏览器 / Node 通用）
+// 劫灰 · 规则引擎 v8（浏览器 / Node 通用）
 // v8 变更（用户 m01004 / m01012 的反馈）：
 //   1. **暗轮固定存在，不再靠竞拍决定**：明轮打完必进暗轮，暗轮打完必回竞拍。
 //      没有奇偶排期，只有这两种转移。竞拍同价且都不加价 → 本轮跳过明轮直接打暗轮，
@@ -21,8 +21,17 @@
   var DEFAULTS = {
     size: 9,
     totalRounds: 20,
-    startCoins: 6,
-    coinPerRound: 1,
+    // ── 两套资源（v11）──────────────────────────────────
+    // 气：只用来竞拍先手，每轮双方各 +1，上限跟弈士走，用掉就销毁（不转给对手）。
+    // 币：只用来买盾和道具，每打过一个明轮按当时的最大连通块结算。
+    startCoins: 2,        // 无锋起手 2 币（原来是 6）
+    coinPerRound: 0,      // 币不再每轮白给
+    coinFromBlob: true,   // 明轮结束：币 += 当时自己的最大连通块
+    startQi: 0,           // 无锋起手 0 气
+    qiPerRound: 1,        // 每进入一次竞拍双方各 +1（第 1 轮也是），到上限就浪费
+    killQi: 1,            // 杀一次额外 +1 气
+    shieldPrice: 2,       // 盾：护一个子，挡一次杀
+    shieldOpens: 1,       // 盾活过几个明轮（1 = 下一个明轮结束就没了）
     // 明轮后手「必须贴着一手落」的限制。v9 起默认关掉：想落哪就落哪。
     // 引擎里 anchors() 整套还在，以后做成弈士技能时把这里打开即可。
     anchorRule: false,
@@ -30,17 +39,17 @@
     champs: ['wufeng', 'wufeng']
   };
 
-  // 选人留着，只是现在只有一个能选。以后加人：平衡靠起手币，不改数值。
+  // 选人留着，只是现在只有一个能选。以后加人：平衡靠起手币与气上限，不改数值。
   var CHAMPIONS = [
-    { id: 'wufeng', name: '无锋', tag: '空白', coins: 6, desc: '没有任何技能。纯靠手上的子说话。' }
+    { id: 'wufeng', name: '无锋', tag: '', coins: 2, qiCap: 5, desc: '没有任何技能。纯靠手上的子说话。' }
   ];
   var CHAMP_BY_ID = {};
   for (var _ci = 0; _ci < CHAMPIONS.length; _ci++) CHAMP_BY_ID[CHAMPIONS[_ci].id] = CHAMPIONS[_ci];
   function champOf(id) { return CHAMP_BY_ID[id] || CHAMP_BY_ID.wufeng; }
 
-  // 商店。when：'any' 随时 / 'hidden' 仅暗轮。
+  // 商店。when：'any' 随时可买 / 'hidden' 仅暗轮可用。
   var ITEMS = [
-    { id: 'shell', name: '空壳', price: 1, when: 'hidden', desc: '什么用也没有。买来就是为了把线路跑通。' }
+    { id: 'shield', name: '盾', price: 2, when: 'hidden', desc: '护住自己的一颗子，挡下一次杀。只能在暗轮落子前用。' }
   ];
   var ITEM_BY_ID = {};
   for (var _ii = 0; _ii < ITEMS.length; _ii++) ITEM_BY_ID[ITEMS[_ii].id] = ITEMS[_ii];
@@ -100,9 +109,21 @@
     this.cells = new Array(n).fill(EMPTY);
     this.placedAt = new Array(n).fill(0);
     this.coins = new Array(2);
+    this.qi = new Array(2);
     this.champ = [champOf(this.o.champs[0]), champOf(this.o.champs[1])];
     this.coins[0] = this.champ[0].coins;
     this.coins[1] = this.champ[1].coins;
+    this.qiCap = [this.champ[0].qiCap, this.champ[1].qiCap];
+    this.qi[0] = Math.min(this.o.startQi, this.qiCap[0]);
+    this.qi[1] = Math.min(this.o.startQi, this.qiCap[1]);
+    // 第 1 轮一开局就是竞拍阶段，所以按「每进入竞拍 +1」立即发（无锋 0 → 1）。
+    this.qi[0] = Math.min(this.qiCap[0], this.qi[0] + this.o.qiPerRound);
+    this.qi[1] = Math.min(this.qiCap[1], this.qi[1] + this.o.qiPerRound);
+    // 盾：[{cell, p, roundsLeft}]。只能在自己暗轮落子前用，护一颗自己的老子。
+    // 「随时可买」= 买回来进道具栏存着；「只有暗轮能用」= 唯一的生效时机。
+    // 位置双方都看得见（看得见才不是陷阱），活过一个明轮就消失。
+    this.shields = [];
+    this.shieldUsedThisHidden = false;
     this.round = 1;
     this.roundMode = 'pending';   // 'pending'（竞拍中，结果未定）| 'open' | 'hidden'
     this.ashCount = 0;
@@ -153,12 +174,12 @@
       return r;
     },
 
-    // ── 竞拍：暗出首价 ────────────────────────────────────
+    // ── 竞拍：暗出首价，用「气」出价（气用完就销毁，不转给对手）──
     resolveBid: function (bids) {
       if (this.phase !== 'auction') throw new Error('phase:' + this.phase);
       var b = [
-        Math.max(0, Math.min(this.coins[0], bids[0] | 0)),
-        Math.max(0, Math.min(this.coins[1], bids[1] | 0))
+        Math.max(0, Math.min(this.qi[0], bids[0] | 0)),
+        Math.max(0, Math.min(this.qi[1], bids[1] | 0))
       ];
       if (b[0] === b[1]) {
         this.tieBid = b[0];
@@ -182,7 +203,7 @@
       if (this.tieRaise[p] !== null) throw new Error('already');
       var amt = 0;
       if (amount != null) {
-        amt = Math.max(0, Math.min(this.coins[p], amount | 0));
+        amt = Math.max(0, Math.min(this.qi[p], amount | 0));
         if (amt <= this.tieBid) throw new Error('must exceed');
       }
       this.tieRaise[p] = amt;
@@ -220,7 +241,7 @@
         this.roundLog.push({ t: 'pass', p: p });
         return this._auctionDone(this.auctionHiBy, this.auctionHi);
       }
-      var amt = Math.max(0, Math.min(this.coins[p], amount | 0));
+      var amt = Math.max(0, Math.min(this.qi[p], amount | 0));
       if (amt <= this.auctionHi) throw new Error('must exceed');
       this.auctionHi = amt;
       this.auctionHiBy = p;
@@ -235,8 +256,9 @@
       this.auctionHi = price;
       this.auctionHiBy = w;
       this.auctionTurn = null;
-      this.coins[w] -= price;
-      this.coins[1 - w] += price;
+      // 气直接销毁：抢位置要真花掉，放弃才真省下。
+      // （原来「赢家付给输家」会让故意输竞拍反而赚钱，换成气也一样。）
+      this.qi[w] -= price;
       this.bidLoss[1 - w] += 1;
       this.roundLog.push({ t: 'won', p: w, price: price });
       this.phase = 'order';
@@ -244,11 +266,13 @@
     },
 
     // 没人抢下先手：本轮直接打暗轮（不是取消暗轮 —— 暗轮打完照样回竞拍）
+    // 注意：这一轮没有进明轮，所以不发币；气在进入竞拍时已经发过了。
     _toHidden: function () {
       this.roundMode = 'hidden';
       this.auctionWinner = null;
       this.first = null;
       this.phase = 'hidden';
+      this.shieldUsedThisHidden = false;
       return { hidden: true };
     },
 
@@ -261,19 +285,36 @@
       return this.first;
     },
 
-    // ── 劫：落子覆盖敌方不受保护的子，那格成灰 ──────────────
-    // 受保护 = 本明轮先手当轮刚下的那颗（placedAt === round）。
+    // ── 杀：落子覆盖敌方不受保护的子，那格成灰 ──────────────
+    // 受保护 = 本明轮先手当轮刚下的那颗（placedAt === round），或者盖了盾。
+    isShielded: function (cell) {
+      for (var i = 0; i < this.shields.length; i++) if (this.shields[i].cell === cell) return true;
+      return false;
+    },
+    shieldOf: function (p) {
+      var out = [];
+      for (var i = 0; i < this.shields.length; i++) if (this.shields[i].p === p) out.push(this.shields[i].cell);
+      return out;
+    },
     isKillTarget: function (cell, byP) {
       var owner = 1 - byP;
-      return this.cells[cell] === owner + 1 &&
-        this.placedAt[cell] > 0 &&
-        this.placedAt[cell] < this.round;
+      if (this.cells[cell] !== owner + 1) return false;
+      if (!(this.placedAt[cell] > 0 && this.placedAt[cell] < this.round)) return false;
+      if (this.isShielded(cell)) return false;   // 有盾就杀不动
+      return true;
     },
     // 当前玩家所有可劫的格子（就是可以覆盖的敌方老子的格）
     killTargetsFor: function (p) {
       var out = [];
       for (var i = 0; i < this.cells.length; i++) if (this.isKillTarget(i, p)) out.push(i);
       return out;
+    },
+
+    // 气：加但不超过上限，溢出直接浪费（没有「憋着」这回事）。
+    _gainQi: function (p, n) {
+      var before = this.qi[p];
+      this.qi[p] = Math.min(this.qiCap[p], this.qi[p] + (n || 1));
+      return this.qi[p] - before;
     },
 
     // kind: 'kill'（明轮落子盖杀敌子）| 'jie'（暗轮两人撞在同一格，无妄之灾）
@@ -294,6 +335,7 @@
       if (this.isKillTarget(cell, p)) {
         this._makeAsh(cell, 'kill');
         this.killCount[p]++;
+        this._gainQi(p, this.o.killQi);
         this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: 1 - p });
         // 这一手没落子（把对方的子烧了），所以没有「这一手」可以贴 ——
         // 后手因此不受贴点约束，anchors() 返回空数组即视作自由落子。
@@ -358,6 +400,7 @@
       if (this.isKillTarget(cell, p)) {
         this._makeAsh(cell, 'kill');
         this.killCount[p]++;
+        this._gainQi(p, this.o.killQi);
         this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: this.first });
         return this._endRound();
       }
@@ -396,7 +439,7 @@
       return this._endRound();
     },
 
-    // ── 商店（随时可买）────────────────────────────────────
+    // ── 商店（随时可买；盾只有暗轮能用）──────────────────────
     buy: function (p, id) {
       if (this.over) throw new Error('game over');
       var it = itemOf(id);
@@ -408,13 +451,29 @@
       return this.items[p].length;
     },
 
-    useItem: function (p, id) {
+    // 用道具。盾：暗轮落子前，罩自己一颗老子（placedAt < round），一个暗轮只能罩一块。
+    useItem: function (p, id, cell) {
       if (this.over) throw new Error('game over');
       var it = itemOf(id);
       if (!it) throw new Error('no such item');
       var k = this.items[p].indexOf(id);
       if (k < 0) throw new Error('not owned');
       if (it.when === 'hidden' && this.phase !== 'hidden') throw new Error('只能暗轮用');
+
+      if (id === 'shield') {
+        if (this.shieldUsedThisHidden) throw new Error('这个暗轮已经罩过一块盾了');
+        if (this.pending.hidden[p] != null) throw new Error('你已经暗落完了，不能再罩盾');
+        if (cell == null) throw new Error('要点一颗自己的子');
+        if (this.cells[cell] !== p + 1) throw new Error('只能罩自己的子');
+        if (!(this.placedAt[cell] > 0 && this.placedAt[cell] < this.round)) throw new Error('刚落的子不能罩盾');
+        if (this.isShielded(cell)) throw new Error('这颗子已经有盾了');
+        this.items[p].splice(k, 1);
+        this.shields.push({ cell: cell, p: p, roundsLeft: this.o.shieldOpens });
+        this.shieldUsedThisHidden = true;
+        this.roundLog.push({ t: 'shield', p: p, cell: cell });
+        return cell;
+      }
+
       this.items[p].splice(k, 1);
       this.roundLog.push({ t: 'use', p: p, item: id });
       return null;
@@ -431,7 +490,23 @@
     // 竞拍没人抢先手 → 本轮直接是暗轮，打完照样回竞拍。没有奇偶、没有漂移。
     _endRound: function () {
       var wasOpen = this.roundMode === 'open';
+      var n0 = this.blobs(0), n1 = this.blobs(1);
+      var big = [n0.length ? n0[0] : 0, n1.length ? n1[0] : 0];
       this.history.push(this.roundLog.slice());
+      // 明轮结束：后手落子收手的那一刻，双方同时按各自最大连通块结算币。
+      if (wasOpen && this.o.coinFromBlob) {
+        this.coins[0] += big[0];
+        this.coins[1] += big[1];
+        this.lastIncome = big.slice();
+        this.roundLog.push({ t: 'income', coins: big.slice() });
+      }
+      // 盾：护过这一个明轮就到期（没过期是因为中间又进了暗轮，顺延）。
+      if (wasOpen) {
+        for (var i = this.shields.length - 1; i >= 0; i--) {
+          this.shields[i].roundsLeft--;
+          if (this.shields[i].roundsLeft <= 0) this.shields.splice(i, 1);
+        }
+      }
       if (this.round >= this.o.totalRounds) { this._finish('rounds'); return this.summary(); }
       this.round++;
       this.roundLog = [];
@@ -448,7 +523,11 @@
       if (wasOpen) {
         this.roundMode = 'hidden';
         this.phase = 'hidden';
+        this.shieldUsedThisHidden = false;
       } else {
+        // 进入竞拍：双方各 +1 气（到上限就浪费）。第 1 轮在构造函数里已经发过。
+        this._gainQi(0, this.o.qiPerRound);
+        this._gainQi(1, this.o.qiPerRound);
         this.roundMode = 'pending';
         this.phase = 'auction';
       }
@@ -470,10 +549,12 @@
         over: this.over, reason: this.endReason, winner: this.winner,
         score: this.finalScore || [this.score(0), this.score(1)],
         blobs: this.finalBlobs || [this.blobs(0), this.blobs(1)],
-        ash: this.ashCount, rounds: this.round, coins: this.coins.slice(),
+        ash: this.ashCount, rounds: this.round,
+        coins: this.coins.slice(), qi: this.qi.slice(), qiCap: this.qiCap.slice(),
         kill: this.killCount.slice(),
         jie: this.jieCount.slice(),
         items: [this.items[0].slice(), this.items[1].slice()],
+        shields: [this.shieldOf(0), this.shieldOf(1)],
         champ: [this.champ[0].id, this.champ[1].id]
       };
     }

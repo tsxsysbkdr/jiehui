@@ -29,19 +29,29 @@ body{
 /* ── 双方信息 ────────────────────────── */
 #sides{display:flex;gap:8px;padding:8px 14px 6px;flex:none}
 .side{flex:1;background:rgba(255,255,255,.42);border:1px solid rgba(120,105,80,.16);
-  border-radius:10px;padding:7px 10px;display:flex;align-items:center;gap:8px;font-size:12px}
+  border-radius:10px;padding:6px 9px;display:flex;align-items:center;gap:7px;font-size:12px}
 .side.me{background:rgba(120,150,120,.13);border-color:rgba(90,120,90,.3)}
 .side .dot{width:15px;height:15px;border-radius:50%;flex:none}
 .dot.b{background:radial-gradient(circle at 36% 30%,#6d6a66,#191817 62%,#060606 100%);
   box-shadow:inset 0 1px 2px rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.35)}
 .dot.w{background:radial-gradient(circle at 36% 30%,#fffefb,#f0eadc 55%,#cdc4af 100%);
   box-shadow:inset 0 0 0 1px rgba(110,98,76,.35),0 1px 2px rgba(0,0,0,.16)}
-.side .nm{flex:1;color:#5a5245}
+.side .nm{color:#5a5245;flex:none}
 .side .sc{font-size:11px;color:#4a5a4a;font-variant-numeric:tabular-nums;
-  background:rgba(90,120,90,.12);border-radius:6px;padding:1px 6px;white-space:nowrap}
+  background:rgba(90,120,90,.12);border-radius:6px;padding:1px 5px;white-space:nowrap;flex:none}
 .side .sc b{font-size:13px;font-weight:700}
-.side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45}
+.side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45;flex:none}
 .side .cn small{font-weight:400;opacity:.65}
+
+/* 气：像血量条，能往上涨（上限跟弈士走） */
+.qibar{flex:1;min-width:34px;display:flex;gap:2px;height:11px;align-items:stretch}
+.qibar i{flex:1;border-radius:2px;background:rgba(120,105,80,.17);transition:background .25s,box-shadow .25s}
+.qibar i.on{background:linear-gradient(180deg,#9fb8a6,#6f8f7c);box-shadow:0 0 0 1px rgba(80,110,90,.25) inset}
+.qibar i.fresh{background:linear-gradient(180deg,#c9dcb6,#8cb073)}
+/* 道具栏 */
+.side .it{flex:none;font-size:11px;color:#6b6252;background:rgba(140,120,80,.12);
+  border-radius:6px;padding:1px 5px;white-space:nowrap;cursor:pointer;display:none}
+.side .it.has{display:block}
 
 /* ── 棋盘：棋子落在交叉点上 ───────────── */
 #wrap{flex:1;display:grid;place-items:center;min-height:0;padding:2px 12px}
@@ -120,6 +130,11 @@ body{
   50%{box-shadow:0 0 11px rgba(163,32,24,.85)}
 }
 .cell.sel::before{content:'';position:absolute;inset:16%;border:2px dashed rgba(64,110,160,.9);border-radius:50%;z-index:3}
+/* 有盾的子：一圈冷银色（双方都看得见 —— 看得见才不是陷阱） */
+.cell.sh::after{content:'';position:absolute;inset:4%;border-radius:50%;
+  border:2px solid rgba(146,168,186,.95);
+  box-shadow:0 0 0 1px rgba(255,255,255,.55) inset,0 0 9px rgba(126,158,186,.75);
+  pointer-events:none;z-index:3}
 
 /* ── 成灰特效：杀（红，主动）／劫（蓝灰，无妄之灾）──────── */
 #fx{position:absolute;inset:0;pointer-events:none;z-index:20}
@@ -224,8 +239,8 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
 </div>
 
 <div id="sides">
-  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
-  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">对手</div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
+  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="qibar"></div><div class="sc"></div><div class="cn">0<small>币</small></div><div class="it"></div></div>
+  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">敌</div><div class="qibar"></div><div class="sc"></div><div class="cn">0<small>币</small></div><div class="it"></div></div>
 </div>
 
 <div id="wrap"><div id="board">
@@ -254,7 +269,7 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
   var EMPTY = 0, BLACK = 1, WHITE = 2, ASH = 3;
   var N = 9;
 
-  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false, fxSeen: -1 };
+  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false, shieldPick: false, fxSeen: -1 };
 
   function $(s) { return document.querySelector(s); }
   function nameOf(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].name; return id; }
@@ -358,6 +373,14 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
   function onCell() {
     var v = S.view; if (!v || v.over || !v.both) return;
     var i = +this.dataset.i;
+    // 盾位：点自己的一颗老子，罩上盾
+    if (S.shieldPick) {
+      if (v.need !== 'hidden') { S.shieldPick = false; S.note = '盾只能在自己暗轮落子前用'; render(); return; }
+      if (v.cells[i] !== S.view.seat + 1) { S.note = '盾只能罩自己的子'; render(); return; }
+      S.shieldPick = false;
+      act({ type: 'use', id: 'shield', cell: i });
+      return;
+    }
     if (v.need === 'place' || v.need === 'second') {
       var isKill = (v.killTargets || []).indexOf(i) >= 0;
       if (isKill) { act({ type: 'place', cell: i }); return; }
@@ -435,28 +458,53 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     }
     $('#ashTxt').textContent = v.ashCount;
 
-    // ── 双方：实时计分（当前最大连通块）+ 持币
+    // ── 双方：气（血量条）+ 实时计分（当前最大连通块）+ 持币 + 道具栏
     var scores = v.scores || [0, 0];
+    function paintSide(pre, who) {
+      var cap = (v.qiCap && v.qiCap[who]) || 5;
+      var q = v.qi ? (v.qi[who] || 0) : 0;
+      var qb = $(pre + ' .qibar');
+      if (qb.children.length > cap) qb.innerHTML = '';
+      while (qb.children.length < cap) qb.appendChild(document.createElement('i'));
+      for (var i3 = 0; i3 < cap; i3++) {
+        qb.children[i3].className = i3 < q ? 'on' : '';
+      }
+      $(pre + ' .sc').innerHTML = '地 <b>' + (scores[who] || 0) + '</b>';
+      $(pre + ' .cn').innerHTML = (v.coins[who] || 0) + '<small>币</small>';
+      var own = (v.items[who] || []).length;
+      var sh = (v.shields && v.shields[who]) ? v.shields[who].length : 0;
+      var itEl = $(pre + ' .it');
+      if (own) {
+        itEl.className = 'it has';
+        itEl.textContent = '盾' + own + (sh ? '/用' + sh : '');
+      } else {
+        itEl.className = 'it';
+        itEl.textContent = '';
+      }
+    }
     $('#sideMe .dot').className = 'dot ' + (me === 0 ? 'b' : 'w');
     $('#sideMe .nm').textContent = '你';
-    $('#sideMe .sc').innerHTML = '地 <b>' + (scores[me] || 0) + '</b>';
-    $('#sideMe .cn').innerHTML = (v.coins[me] || 0) + '<small>币</small>';
+    paintSide('#sideMe', me);
     $('#sideOpp .dot').className = 'dot ' + (op === 0 ? 'b' : 'w');
-    $('#sideOpp .nm').textContent = '对手';
-    $('#sideOpp .sc').innerHTML = '地 <b>' + (scores[op] || 0) + '</b>';
-    $('#sideOpp .cn').innerHTML = (v.coins[op] || 0) + '<small>币</small>';
+    $('#sideOpp .nm').textContent = '敌';
+    paintSide('#sideOpp', op);
 
     // ── 棋盘
     var anchors = v.need === 'second' ? (v.anchors || []) : [];
     var jt = (v.need === 'place' || v.need === 'second') ? (v.killTargets || []) : [];
+    var shCells = [];
+    if (v.shields) shCells = v.shields[0].concat(v.shields[1]);
     for (var i2 = 0; i2 < N * N; i2++) {
       var c = v.cells[i2], cls = 'cell';
       if (c === BLACK) cls += ' b'; else if (c === WHITE) cls += ' w'; else if (c === ASH) cls += ' a';
       if (anchors.indexOf(i2) >= 0) cls += ' anchor';
       if (jt.indexOf(i2) >= 0) cls += ' kill';
+      if (shCells.indexOf(i2) >= 0) cls += ' sh';
       if (v.lastCell != null && v.lastCell === i2) cls += ' last';
       if (S.sel === i2) cls += ' sel';
-      if (v.need === 'place') cls += ' tap';
+      if (S.shieldPick) {
+        if (c === me + 1) cls += ' tap';
+      } else if (v.need === 'place') cls += ' tap';
       else if (v.need === 'second') {
         if (jt.indexOf(i2) >= 0) cls += ' tap';
         else if (c === EMPTY && (anchors.length === 0 || anchors.indexOf(i2) >= 0)) cls += ' tap';
@@ -466,6 +514,18 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
 
     // ── 消息 + 按钮
     var msg = '', btns = [];
+    if (S.shieldPick) {
+      msg = '<em>选盾位</em> —— 点一顆自己的子罩上盾。<br><s>盾挡一次杀，活过下一个明轮就没了。一个暗轮只能罩一块。</s>';
+      btns.push({ t: '算了', ghost: true, f: function () { S.shieldPick = false; S.note = ''; render(); } });
+      $('#msg').innerHTML = msg;
+      var bxS = $('#btns'); bxS.innerHTML = '';
+      btns.forEach(function (b3) {
+        var el3 = document.createElement('button');
+        el3.textContent = b3.t; el3.className = 'ghost'; el3.onclick = b3.f;
+        bxS.appendChild(el3);
+      });
+      return;
+    }
     if (!v.both) {
       msg = '把下面这个地址发给朋友，等他进桌 —— 或者再开一个浏览器标签页自己试。';
       btns.push({ t: '复制地址', ghost: true, f: copyLink });
@@ -476,35 +536,35 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       btns.push({ t: '再来一局', wide: true, f: function () { act({ type: 'rematch' }); } });
       if (v.rematch[me]) msg += '<br>等对手确认，然后重新选弈士…';
     } else if (v.need === 'bid') {
-      msg = '第 ' + v.round + ' 轮 —— 暗出几币抢先手？<br><s>赢的人把币付给对手；出价低的可以加价，也可以放弃。都不加价，这轮就直接打暗轮。</s>';
-      var mx = v.coins[me];
+      msg = '第 ' + v.round + ' 轮 —— 暗出几<em>气</em>抢先手？<br><s>抢到的气直接花掉，不给对手；出价低的可加价，也可放弃。都不加价，这轮就直接打暗轮（不进明轮，不发币）。</s>';
+      var mx = v.qi[me] || 0;
       var cap = Math.min(mx, 8);
       for (var b = 0; b <= cap; b++) {
-        btns.push({ t: b + ' 币', small: true, f: (function (n) { return function () { act({ type: 'bid', amount: n }); }; })(b) });
+        btns.push({ t: b + ' 气', small: true, f: (function (n) { return function () { act({ type: 'bid', amount: n }); }; })(b) });
       }
       if (mx > cap) btns.push({ t: '全押 ' + mx, small: true, accent: true, f: function () { act({ type: 'bid', amount: mx }); } });
     } else if (v.need === 'tie') {
-      msg = '双方都出了 <em>' + v.tieBid + '</em> 币。<br>再加就得高于它，不加就不用花钱 —— 两边都不加，这轮直接打暗轮。';
+      msg = '双方都出了 <em>' + v.tieBid + '</em> 气。<br>再加就得高于它，不加就不用花 —— 两边都不加，这轮直接打暗轮。';
       btns.push({ t: '不加', wide: true, ghost: true, f: function () { act({ type: 'tie', amount: null }); } });
       for (var t1 = 1; t1 <= 3; t1++) {
         var amt = v.tieBid + t1;
-        if (amt > v.coins[me]) break;
+        if (amt > (v.qi[me] || 0)) break;
         btns.push({ t: '加到 ' + amt, accent: true, f: (function (n) { return function () { act({ type: 'tie', amount: n }); }; })(amt) });
       }
     } else if (v.need === 'raise') {
       var hi = v.auctionHi, byMe = v.auctionHiBy === me;
-      msg = (byMe ? '你' : '对手') + ' 现在出 <em>' + hi + '</em> 币。' +
+      msg = (byMe ? '你' : '对手') + ' 现在出 <em>' + hi + '</em> 气。' +
         (byMe ? '<br>等对手决定加价还是放弃…' : '<br>你要加得比他高，或者放弃。');
       if (!byMe) {
         btns.push({ t: '放弃', wide: true, ghost: true, f: function () { act({ type: 'raise', amount: null }); } });
         for (var r1 = 1; r1 <= 3; r1++) {
           var a2 = hi + r1;
-          if (a2 > v.coins[me]) break;
+          if (a2 > (v.qi[me] || 0)) break;
           btns.push({ t: '加到 ' + a2, accent: true, f: (function (n) { return function () { act({ type: 'raise', amount: n }); }; })(a2) });
         }
       }
     } else if (v.need === 'order') {
-      msg = '你以 <em>' + v.auctionHi + '</em> 币抢下了先手。选自己先动，还是后动？';
+      msg = '你以 <em>' + v.auctionHi + '</em> 气抢下了先手。选自己先动，还是后动？<br><s>先手这一子本轮不会被杀，而且动手越早，占位越自由。</s>';
       btns.push({ t: '我先动', wide: true, f: function () { act({ type: 'order', choice: 'first' }); } });
       btns.push({ t: '让对手先', wide: true, ghost: true, f: function () { act({ type: 'order', choice: 'second' }); } });
     } else if (v.need === 'place') {
@@ -517,10 +577,9 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
         btns.push({ t: '确认落子', wide: true, f: function () { act({ type: 'place', cell: S.sel }); } });
         btns.push({ t: '重选', ghost: true, f: function () { S.sel = null; render(); } });
       } else {
-        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰 —— 这叫<em>劫</em>。';
+        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰 —— 这叫<em>劫</em>。<br><s>想护住哪颗子，就趁现在用盾（只能暗轮落子前用，一个暗轮一块）。</s>';
       }
-      var owned = (v.items[me] || []);
-      if (owned.length) btns.push({ t: '用道具 (' + owned.length + ')', ghost: true, f: openShop });
+      if ((v.items[me] || []).length) btns.push({ t: '用道具 (' + (v.items[me] || []).length + ')', ghost: true, f: openShop });
     } else {
       msg = (v.phase === 'auction' && v.myBid != null) ? '已出 <em>' + v.myBid + '</em> 币，等对手…'
         : v.phase === 'tie-raise' && v.tieMine !== null ? '已选，等对手…'
@@ -629,7 +688,15 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       if (owned > 0 && v.need === 'hidden' && it.when === 'hidden') {
         var use = document.createElement('button');
         use.className = 'ghost'; use.textContent = '用';
-        use.onclick = function () { act({ type: 'use', id: it.id }); };
+        use.onclick = function () {
+          if (it.id === 'shield') {
+            // 盾要点自己的一颗子：关掉商店，进入「点格子挑盾位」模式
+            S.shop = false; S.shieldPick = true; S.note = '点一颗自己的子，把盾罩在它上面（暗轮落子前才能用）';
+            render();
+            return;
+          }
+          act({ type: 'use', id: it.id });
+        };
         row.appendChild(use);
       }
       host.appendChild(row);

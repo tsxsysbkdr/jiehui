@@ -111,6 +111,11 @@ function view(r, seat) {
     roundMode: g.roundMode,
     cells: g.cells.slice(),
     coins: g.coins.slice(),
+    qi: g.qi.slice(),
+    qiCap: g.qiCap.slice(),
+    shields: [g.shieldOf(0), g.shieldOf(1)],     // 盾盖在哪些格：双方都看得见（看得见才不是陷阱）
+    shieldUsedThisHidden: g.shieldUsedThisHidden,
+    lastIncome: g.lastIncome || null,            // 上一个明轮结算的币，给界面弹一下
     ashCount: g.ashCount,
     kills: g.killCount.slice(),      // 明轮「杀」的次数，各自记
     jies: g.jieTotal,                // 暗轮「劫」的总次数（无妄之灾，不算谁的）
@@ -184,8 +189,11 @@ function act(r, seat, a) {
   }
   if (a.type === 'use') {
     if (g.over) return '对局已结束';
-    try { g.useItem(seat, a.id); } catch (e) {
-      return e.message === '只能暗轮用' ? '这件道具只能在暗轮用' : '你没有这件道具';
+    try { g.useItem(seat, a.id, a.cell); } catch (e) {
+      const m = e.message;
+      if (m === '只能暗轮用') return '这件道具只能在暗轮用';
+      if (m === 'not owned') return '你没有这件道具';
+      return m;
     }
     bump(r);
     return null;
@@ -212,7 +220,7 @@ function act(r, seat, a) {
   if (a.type === 'bid') {
     if (g.phase !== 'auction') return '现在不是出价阶段';
     if (r.bids[seat] != null) return '你已经出过价了';
-    const amt = Math.max(0, Math.min(g.coins[seat], a.amount | 0));
+    const amt = Math.max(0, Math.min(g.qi[seat], a.amount | 0));
     r.bids[seat] = amt;
     if (r.bids[0] != null && r.bids[1] != null) {
       const b = r.bids.slice();
