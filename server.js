@@ -9,7 +9,12 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { Game, EMPTY, CHAMPIONS, ITEMS, itemOf } = require('./engine.js');
+const { Game, EMPTY, CHAMPIONS, ITEMS, itemOf, MODES } = require('./engine.js');
+
+// 选人界面只给名字：技能说明一律不下发，玩家自己摸索（用户 m03244）。
+const CHAMP_PICK = CHAMPIONS.map((c) => ({ id: c.id, name: c.name }));
+// 模式按钮：名字 + 一句话，规则细节不下发（进游戏自己看规则面板）。
+const MODE_PICK = MODES.map((m) => ({ id: m.id, name: m.name, rounds: m.rounds, coins: m.coins, desc: m.desc }));
 
 // 本地用 JIEHUI_PORT（默认 7788）；Render 等云平台会注入 PORT，优先用它
 const PORT = Number(process.env.PORT || process.env.JIEHUI_PORT || 7788);
@@ -28,7 +33,10 @@ function mkRoom() {
   const r = {
     id,
     seatOf: [null, null],
+    // 进房间后的流程：先选模式（双方都选成一样才往下走），再选弈士。
+    modePick: [null, null],
     champPick: [null, null],
+    quick: false,          // 兼容旧字段，现在由 modePick 决定
     game: null,
     bids: [null, null],
     version: 1,
@@ -39,12 +47,18 @@ function mkRoom() {
   return r;
 }
 
-// 两人到齐、并且都选了弈士才开局（选人界面留着，只是现在只有一个能选）
+// 双方选成同一个模式才算定下来，然后才允许选弈士。
+function modeAgreed(r) {
+  return r.modePick[0] != null && r.modePick[0] === r.modePick[1];
+}
+
+// 两人到齐、模式说定了、并且都选了弈士才开局
 function startIfReady(r) {
   if (r.game) return;
   if (r.seatOf[0] == null || r.seatOf[1] == null) return;
+  if (!modeAgreed(r)) return;
   if (!r.champPick[0] || !r.champPick[1]) return;
-  r.game = new Game({ champs: r.champPick.slice() });
+  r.game = new Game({ champs: r.champPick.slice(), mode: r.modePick[0] });
   r.bids = [null, null];
   r.rematch = [false, false];
 }
@@ -73,13 +87,22 @@ function view(r, seat) {
   const both = r.seatOf[0] != null && r.seatOf[1] != null;
 
   if (!r.game) {
+    const agreed = modeAgreed(r);
     return {
       v: r.version, room: r.id, seat: seat, both: both,
-      need: both ? (r.champPick[seat] ? null : 'champ') : null,
+      // 流程两步：先定模式（两人选成一样），再选弈士。按钮按阶段出现。
+      step: agreed ? 'champ' : 'mode',
+      need: !both ? null : (agreed ? (r.champPick[seat] ? null : 'champ') : 'mode'),
       picking: true,
       myPick: r.champPick[seat],
       oppPicked: !!r.champPick[opp],
-      champs: CHAMPIONS,
+      myMode: r.modePick[seat],
+      oppMode: r.modePick[opp],
+      modeAgreed: agreed,
+      mode: agreed ? r.modePick[0] : null,
+      modes: MODE_PICK,
+      quick: r.modePick[0] === 'quick',
+      champs: CHAMP_PICK,
       shop: ITEMS, items: [[], []], coins: [0, 0],
       over: false,
       rematch: r.rematch.slice()
@@ -93,10 +116,9 @@ function view(r, seat) {
   else if (g.phase === 'auction') need = r.bids[seat] == null ? 'bid' : null;
   else if (g.phase === 'tie-raise') need = g.tieRaise[seat] === null ? 'tie' : null;
   else if (g.phase === 'raise') need = g.auctionTurn === seat ? 'raise' : null;
-  else if (g.phase === 'order') need = g.auctionWinner === seat ? 'order' : null;
   else if (g.phase === 'open-first') need = g.first === seat ? 'place' : null;
   else if (g.phase === 'open-second') need = (1 - g.first) === seat ? 'second' : null;
-  else if (g.phase === 'hidden') need = g.pending.hidden[seat] == null ? 'hidden' : null;
+  else if (g.phase === 'hidden') need = (g.pending.hidden[seat] == null && !g.pending.passed[seat]) ? 'hidden' : null;
 
   const v = {
     v: r.version,
@@ -108,12 +130,20 @@ function view(r, seat) {
     phase: g.phase,
     round: g.round,
     totalRounds: g.o.totalRounds,
+    mode: g.o.mode,
+    quick: g.o.mode === 'quick',
     roundMode: g.roundMode,
     cells: g.cells.slice(),
     coins: g.coins.slice(),
     qi: g.qi.slice(),
     qiCap: g.qiCap.slice(),
-    shields: [g.shieldOf(0), g.shieldOf(1)],     // 盾盖在哪些格：双方都看得见（看得见才不是陷阱）
+    // 盾：自己的随时看得见；**对手的只在明轮看得见**。
+    // 暗轮里对手偷偷罩了一颗子，那是他那半边的信息 —— 等这一轮过去（进明轮）才亮出来。
+    // 换句话说：对面只知道「你用了盾」（道具数会少一件），但不知道罩在哪。
+    shields: [
+      (seat === 0 || g.phase !== 'hidden') ? g.shieldOf(0) : [],
+      (seat === 1 || g.phase !== 'hidden') ? g.shieldOf(1) : []
+    ],
     shieldUsedThisHidden: g.shieldUsedThisHidden,
     lastIncome: g.lastIncome || null,            // 上一个明轮结算的币，给界面弹一下
     ashCount: g.ashCount,
@@ -133,6 +163,7 @@ function view(r, seat) {
     myBid: r.bids[seat],
     oppBidIn: r.bids[opp] != null,
     oppHiddenIn: g.pending.hidden[opp] != null,
+    myPassedHidden: !!g.pending.passed[seat],
     over: g.over,
     winner: g.winner,
     endReason: g.endReason,
@@ -140,8 +171,43 @@ function view(r, seat) {
     champ: [g.champ[0], g.champ[1]],
     log: g.roundLog.slice(),
     fx: g.fx.slice(-8),
+    modeFx: g.modeLog.slice(-4),     // 阶段切换：夺 / 明 / 暗，前端闪一下大字
+    incomeFx: g.incomeFx.slice(-2),  // 明轮结算：哪些块发了多少币，前端在那些子上闪金币
+    canGive: (g.phase === 'open-first' && g.first === seat && g.pending.openFirst == null && !g.gaveFirst) ? true : false,
     items: [g.items[0].slice(), g.items[1].slice()],
-    shop: ITEMS,
+    // 商店：带上「已买几个 / 上限」，前端据此把按钮置灰
+    shop: ITEMS.map((it) => Object.assign({}, it, {
+      bought: it.id === 'dan' ? g.danBought[seat] : it.id === 'jing' ? g.jingBought[seat] : 0,
+      left: it.limit ? Math.max(0, it.limit - (it.id === 'dan' ? g.danBought[seat] : it.id === 'jing' ? g.jingBought[seat] : 0)) : -1
+    })),
+    // 技能栏：只发「自己这个弈士」的技能，附带冷却与此刻能不能发动。
+    // 对手的技能不发 —— 选人界面不写技能说明，让玩家自己摸索。
+    skills: g.skillsOf(seat).map((sk, k) => ({
+      id: sk.id, name: sk.name, cd: sk.cd, when: sk.when,
+      qi: sk.id === 'huang' || sk.id === 'fu' ? 4 : (sk.qi || 0),
+      // 气够不够 / 这一手时机到不到，是两件事：气够但现在不是时候 → 显示成灰的就绪，
+      // 不能写「缺气」，那会让人误以为在攒气。
+      enough: g.qi[seat] >= (sk.id === 'huang' || sk.id === 'fu' ? 4 : (sk.qi || 0)),
+      wait: g.skillWait(seat, k),
+      ready: g.canUseSkill(seat, k),
+      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[seat].indexOf(sk.id) >= 0 : (sk.id === 'fu' ? g.fuUsed[seat] : false)
+    })),
+    arm: g.arm[seat] ? g.arm[seat].id : null,   // 已经预选但还没杀成的杀招（平/垂/荒 的 id）
+    armEat: g.arm[seat] ? (g.arm[seat].eat || null) : null,   // 荒 吃掉的是哪一支
+    myUsedOnce: g.onceUsed[seat].slice(),   // 自己用掉的平/垂（前端据此决定荒还能吃哪支）
+    moveFx: g.moveFx.slice(-4),
+    zone: g.zone,                    // 禁入点：{cells, p, kind, center}
+    zoneFx: g.zoneFx.slice(-3),      // 金框特效流水
+    fuFx: g.fuFx.slice(-3),          // 覆生效的碎裂流水
+    myFu: g.fu[seat],                // 我覆押下的格（自己看得见，对手看不见）
+    myFuMode: g.fuTarget[seat],      // 'guess' 盲猜 / 'kill' 直接盯上一颗子
+    fuLeft: g.fuOwned[seat] && !g.fuUsed[seat] ? 1 : 0,
+    // 对手的技能：名字和冷却属于公开信息（打牌看得见对面剩几张），
+    // 但介绍不给 —— 想弄明白对面在干什么，得自己从对局里看出来。
+    skillsOpp: g.skillsOf(1 - seat).map((sk, k) => ({
+      id: sk.id, name: sk.name, wait: g.skillWait(1 - seat, k),
+      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[1 - seat].indexOf(sk.id) >= 0 : (sk.id === 'fu' ? g.fuUsed[1 - seat] : false)
+    })),
     rematch: r.rematch.slice()
   };
 
@@ -157,15 +223,30 @@ function view(r, seat) {
   if (need === 'place' || need === 'second') {
     v.killTargets = g.killTargetsFor(seat);
   }
-  if (need === 'second' && g.o.anchorRule) v.anchors = g.anchors();
+  // 禁入点：自己设的那几个格子前端要打金框
+  v.forbidden = g.zoneOf(0).concat(g.zoneOf(1));
+  v.forbiddenMine = g.zoneOf(seat);
+  v.forbiddenOpp = g.zoneOf(1 - seat);
+  if (need === 'second' && g.o.anchorRule) v.anchors = g.anchors(seat);
   return v;
 }
 
 // ── 动作 ────────────────────────────────────────────────────
 function act(r, seat, a) {
-  // 选弈士（v8 只有一个「无锋」，但流程留着）
+  // 选模式（第一步）：双方各自选，选成一样才算定下来，之后才出现选弈士按钮
+  if (a.type === 'mode') {
+    if (r.game) return '已经开局，不能改模式了';
+    if (!MODES.some((m) => m.id === a.id)) return '没有这个模式';
+    r.modePick[seat] = a.id;
+    startIfReady(r);
+    bump(r);
+    return null;
+  }
+
+  // 选弈士（第二步）
   if (a.type === 'champ') {
     if (r.game) return '已经开局';
+    if (!modeAgreed(r)) return '先把模式说定';
     if (!CHAMPIONS.some((c) => c.id === a.id)) return '没有这个弈士';
     if (r.champPick[seat]) return '你已经选好了';
     r.champPick[seat] = a.id;
@@ -174,8 +255,17 @@ function act(r, seat, a) {
     return null;
   }
 
-  if (!r.game) return '还在选弈士';
+  // 极简模式开关（兼容旧前端）：等价于在极简/标准之间切
+  if (a.type === 'quick') {
+    if (r.game) return '已经开局，不能改模式了';
+    r.modePick[seat] = a.on ? 'quick' : 'standard';
+    startIfReady(r);
+    bump(r);
+    return null;
+  }
+
   const g = r.game;
+  if (!g) return '还在选弈士';
 
   // 商店任何阶段都能买（只要没终局）
   if (a.type === 'buy') {
@@ -203,9 +293,10 @@ function act(r, seat, a) {
     if (a.type === 'rematch') {
       r.rematch[seat] = true;
       if (r.rematch[0] && r.rematch[1]) {
-        // 回到选人界面（v8 只有一个「无锋」，但流程保留）
+        // 回到最前面：先重新定模式，再选弈士（模式可能想换个新的）
         r.game = null;
         r.bids = [null, null];
+        r.modePick = [null, null];
         r.champPick = [null, null];
         r.rematch = [false, false];
       }
@@ -216,6 +307,13 @@ function act(r, seat, a) {
   }
   const both = r.seatOf[0] != null && r.seatOf[1] != null;
   if (!both) return '等待对手加入';
+
+  // 认输：任何时候都能点，直接判负。
+  if (a.type === 'resign') {
+    try { g.resign(seat); } catch (e) { return e.message; }
+    bump(r);
+    return null;
+  }
 
   if (a.type === 'bid') {
     if (g.phase !== 'auction') return '现在不是出价阶段';
@@ -232,7 +330,7 @@ function act(r, seat, a) {
     if (g.tieRaise[seat] !== null) return '你已经选过了';
     try { g.submitTieRaise(seat, a.amount == null ? null : a.amount | 0); }
     catch (e) {
-      if (e.message === 'must exceed') return '加价必须高于 ' + g.tieBid + ' 币';
+      if (e.message === 'must exceed') return '加价必须高于 ' + g.tieBid + ' 气';
       return e.message;
     }
   } else if (a.type === 'raise') {
@@ -240,13 +338,56 @@ function act(r, seat, a) {
     if (g.auctionTurn !== seat) return '还不到你';
     try { g.raiseOrPass(seat, a.amount == null ? null : a.amount | 0); }
     catch (e) {
-      if (e.message === 'must exceed') return '加价必须高于 ' + g.auctionHi + ' 币';
+      if (e.message === 'must exceed') return '加价必须高于 ' + g.auctionHi + ' 气';
       return e.message;
     }
   } else if (a.type === 'order') {
-    if (g.phase !== 'order') return '现在不是选序阶段';
-    if (g.auctionWinner !== seat) return '只有赢下竞拍的人能选';
-    g.applyOrder(a.choice === 'first' ? 'first' : 'second');
+    // v12：不再有独立的「选先后手」阶段 —— 赢家默认先手。
+    // 想把先动让给对手，用 give。这里保留兼容：choice==='second' 等价于 give。
+    if (a.choice === 'second') {
+      try { g.giveFirst(seat); } catch (e) { return e.message; }
+    } else if (g.phase !== 'open-first' || g.first !== seat) {
+      return '现在不是你走';
+    }
+  } else if (a.type === 'give') {
+    try { g.giveFirst(seat); } catch (e) {
+      const m = e.message;
+      if (m === 'not your turn') return '只有先手能让';
+      if (m === 'already placed') return '已经落子了';
+      if (m === '已经让过了') return '这一轮已经让过了';
+      return m;
+    }
+  } else if (a.type === 'pass') {
+    try {
+      if (g.phase === 'hidden') g.passHidden(seat);
+      else g.passTurn(seat);
+    } catch (e) { return e.message; }
+  } else if (a.type === 'skill') {
+    const k = a.k | 0;
+    const sk = g.skillsOf(seat)[k];
+    if (!sk) return '没有这个技能';
+    try {
+      g.useSkill(seat, k, {
+        from: a.from == null ? null : (a.from | 0),
+        to: a.to == null ? null : (a.to | 0),
+        cell: a.cell == null ? null : (a.cell | 0),
+        eat: a.eat || null
+      });
+    } catch (e) {
+      const m = e.message;
+      if (m === '现在不能发动') {
+        const w = g.skillWait(seat, k);
+        return w > 0 ? ('还要等 ' + w + ' 轮') : '现在不能发动这个技能';
+      }
+      if (m === '要选一格劫灰和一个空位') return '先点一格劫灰，再点一个空位';
+      if (m === '那不是劫灰') return '那不是劫灰';
+      if (m === '要挪到空格上') return '只能挪到空着的位置';
+      if (m === '要选一格') return '点一个空格，猜对面会落哪';
+      if (m === '只能点空格') return '只能点一个空格';
+      if (m === '荒要先选吃掉平还是垂') return '荒要先选吃掉平还是垂';
+      if (m === '那一支已经用掉了') return '那一支已经用掉了';
+      return m;
+    }
   } else if (a.type === 'jie') {
     // v8：劫不再是独立动作，改成「落子覆盖」。这里保留兼容，转成 place。
     return act(r, seat, { type: 'place', cell: a.cell });
@@ -271,6 +412,7 @@ function act(r, seat, a) {
       g.openSecond({ type: 'place', cell: cell });
     } else if (g.phase === 'hidden') {
       if (g.pending.hidden[seat] != null) return '你已落子';
+      if (g.pending.passed[seat]) return '这一轮你已经过了';
       if (g.cells[cell] !== EMPTY) return '这格已经有子了';
       g.hiddenSubmit(seat, cell);
     } else {

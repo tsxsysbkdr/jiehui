@@ -22,35 +22,61 @@ body{
 #title b{font-size:19px;letter-spacing:5px;font-weight:600}
 #title span{font-size:11px;color:#8a7f6b;letter-spacing:1px}
 #meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:12px;color:#6b6252}
-#ashbar{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
-#ashbar i{width:9px;height:9px;border-radius:2px;background:#cfc6b2;display:block;transition:background .3s}
+#ashbar{display:flex;gap:3px;align-items:center;flex-wrap:nowrap}
+#ashbar i{width:9px;height:9px;border-radius:2px;background:#cfc6b2;display:block;transition:background .3s,box-shadow .3s}
 #ashbar i.on{background:#8f3d34}
+/* 第二阶段（灰超过 10 格）：格子变得更烫 */
+#meta.p2 #ashbar i{background:#e0d6c0}
+#meta.p2 #ashbar i.on{background:#c22a1d;box-shadow:0 0 6px rgba(194,42,29,.9)}
+#meta.p2 #ashTxt{color:#a8271b;font-weight:700}
 
 /* ── 双方信息 ────────────────────────── */
 #sides{display:flex;gap:8px;padding:8px 14px 6px;flex:none}
-.side{flex:1;background:rgba(255,255,255,.42);border:1px solid rgba(120,105,80,.16);
-  border-radius:10px;padding:6px 9px;display:flex;align-items:center;gap:7px;font-size:12px}
-.side.me{background:rgba(120,150,120,.13);border-color:rgba(90,120,90,.3)}
-.side .dot{width:15px;height:15px;border-radius:50%;flex:none}
+/* 两行：第一行 = 棋子标记 + 名字 + 气条；第二行 = 技能 / 介绍 / 道具 ... 地 / 币 */
+.side{flex:1;min-width:0;background:rgba(255,255,255,.42);border:1px solid rgba(120,105,80,.16);
+  border-radius:10px;padding:6px 8px 5px;font-size:12px;display:flex;flex-direction:column;gap:3px}
+.side .r1{display:flex;align-items:center;gap:5px;min-width:0}
+.side .r2{display:flex;align-items:center;gap:4px;min-width:0;flex-wrap:nowrap}
+.side .dot{width:14px;height:14px;border-radius:50%;flex:none}
 .dot.b{background:radial-gradient(circle at 36% 30%,#6d6a66,#191817 62%,#060606 100%);
   box-shadow:inset 0 1px 2px rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.35)}
 .dot.w{background:radial-gradient(circle at 36% 30%,#fffefb,#f0eadc 55%,#cdc4af 100%);
   box-shadow:inset 0 0 0 1px rgba(110,98,76,.35),0 1px 2px rgba(0,0,0,.16)}
-.side .nm{color:#5a5245;flex:none}
-.side .sc{font-size:11px;color:#4a5a4a;font-variant-numeric:tabular-nums;
-  background:rgba(90,120,90,.12);border-radius:6px;padding:1px 5px;white-space:nowrap;flex:none}
-.side .sc b{font-size:13px;font-weight:700}
-.side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45;flex:none}
+.side .nm{color:#5a5245;flex:none;white-space:nowrap}
+.side .sc{font-size:10px;color:#4a5a4a;font-variant-numeric:tabular-nums;
+  background:rgba(90,120,90,.12);border-radius:6px;padding:1px 4px;white-space:nowrap;flex:none;margin-left:auto}
+.side .sc b{font-size:12px;font-weight:700}
+.side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45;flex:none;font-size:11px}
 .side .cn small{font-weight:400;opacity:.65}
 
 /* 气：像血量条，能往上涨（上限跟弈士走） */
-.qibar{flex:1;min-width:34px;display:flex;gap:2px;height:11px;align-items:stretch}
+.qibar{flex:1;min-width:18px;display:flex;gap:2px;height:10px;align-items:stretch}
 .qibar i{flex:1;border-radius:2px;background:rgba(120,105,80,.17);transition:background .25s,box-shadow .25s}
 .qibar i.on{background:linear-gradient(180deg,#9fb8a6,#6f8f7c);box-shadow:0 0 0 1px rgba(80,110,90,.25) inset}
-.qibar i.fresh{background:linear-gradient(180deg,#c9dcb6,#8cb073)}
-/* 道具栏 */
-.side .it{flex:none;font-size:11px;color:#6b6252;background:rgba(140,120,80,.12);
-  border-radius:6px;padding:1px 5px;white-space:nowrap;cursor:pointer;display:none}
+
+/* 技能栏：第二行顶头。每个技能一个「名字+状态」小按钮，后面跟一个「?」。
+   书缘有三个分支，所以这里得能并排放下三个，不能撑破卡片。 */
+.sks{display:none;gap:4px;flex:none;align-items:center}
+.sks.has{display:flex}
+.skbox{display:inline-flex;align-items:center;gap:1px;flex:none}
+.side .sk{flex:none;font:inherit;font-size:10px;line-height:1;padding:3px 5px;border-radius:6px;
+  background:rgba(140,110,60,.14);color:#6a5636;border:0;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:3px;font-weight:600}
+.side .sk i{font-style:normal;font-size:9px;font-weight:700;color:#8a7346;opacity:.8}
+.side .sk:disabled{opacity:.42;cursor:default}
+.side .sk.ready{background:rgba(120,150,110,.24);color:#3f5a3c;box-shadow:0 0 0 1px rgba(80,120,80,.25) inset}
+.side .sk.ready i{color:#4f6f49}
+.side .sk.sel{outline:2px solid rgba(64,110,160,.85);outline-offset:1px}
+.side .sk.used{background:rgba(120,105,80,.1);color:#8d8578;text-decoration:line-through}
+.side .sk.armed{background:rgba(176,132,52,.3);color:#6b4d16;box-shadow:0 0 0 1px rgba(176,132,52,.6) inset}
+.side .info{flex:none;width:13px;height:13px;padding:0;border-radius:50%;font-size:9px;line-height:1;
+  background:rgba(255,255,255,.6);color:#6b6252;box-shadow:inset 0 0 0 1px rgba(120,105,80,.35);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;min-width:0;border:0}
+.side .info.has{display:inline-flex}
+/* 道具栏：绝不撑破卡片 —— 超过宽度就省略 */
+.side .it{font-size:10px;line-height:1.4;color:#6b6252;background:rgba(140,120,80,.12);
+  border-radius:6px;padding:1px 4px;white-space:nowrap;cursor:pointer;display:none;flex:none;max-width:52px;
+  overflow:hidden;text-overflow:ellipsis}
 .side .it.has{display:block}
 
 /* ── 棋盘：棋子落在交叉点上 ───────────── */
@@ -78,6 +104,21 @@ body{
 #board svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #board svg line{stroke:rgba(104,84,54,.62);stroke-width:.022;stroke-linecap:square}
 #board svg line.edge{stroke:rgba(104,84,54,.8);stroke-width:.03}
+
+/* 第二阶段（劫灰超过 10 格）：棋盘边缘开始发烫、缓慢呼吸 ——
+   不是换个皮肤，是让桌上两个人一眼看出「这局进后期了」。 */
+#board.p2{animation:boil 3.4s ease-in-out infinite}
+#board.p2::after{content:'';position:absolute;inset:-7px;border-radius:6px;pointer-events:none;z-index:9;
+  box-shadow:0 0 0 2px rgba(168,39,27,.55),0 0 22px 4px rgba(168,39,27,.42) inset,0 0 26px 2px rgba(168,39,27,.38);
+  animation:boilring 2.6s ease-in-out infinite}
+@keyframes boilring{
+  0%,100%{opacity:.42}
+  50%{opacity:1}
+}
+@keyframes boil{
+  0%,100%{filter:saturate(1) contrast(1)}
+  50%{filter:saturate(1.12) contrast(1.04)}
+}
 
 #grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr)}
 .cell{position:relative;cursor:default}
@@ -136,6 +177,79 @@ body{
   box-shadow:0 0 0 1px rgba(255,255,255,.55) inset,0 0 9px rgba(126,158,186,.75);
   pointer-events:none;z-index:3}
 
+/* 拂尘选灰：灰格点得动 */
+.cell.ashpick{cursor:pointer}
+.cell.ashpick::before{box-shadow:0 0 0 2px rgba(126,42,36,.85),0 0 10px rgba(126,42,36,.55)}
+
+/* 拂尘：灰团从一个交叉点**飞**到另一个交叉点（不是闪一下就没）。
+   两个点都在 #fx 图层里，用一个跨点的 div，靠 transform 平移过去。
+   位置用百分比算，所以窗口大小变了也不会跑偏。 */
+/* 关键：.blob 的宽高 = 恰好一格（inset:0），所以 translate 的 100% 正好是一格。
+   之前 inset:-40% 让宽度变成 1.8 格，一格差走了 1.8 格，看起来就"飞歪了"。 */
+.fxmove{position:absolute;pointer-events:none;z-index:5;width:11.12%;height:11.12%;
+  transform:translate(-50%,-50%)}
+.fxmove .blob{position:absolute;inset:2%;border-radius:46% 54% 44% 56%/56% 44% 58% 42%;
+  background:radial-gradient(circle at 42% 38%,
+    rgba(126,42,36,.72) 0%,rgba(126,42,36,.5) 38%,rgba(126,42,36,.16) 64%,rgba(126,42,36,0) 76%);
+  filter:blur(.7px);
+  animation:fxfly .78s cubic-bezier(.32,.08,.22,1) forwards}
+/* --dx/--dy 由脚本按格距算好（9×9 一屏 → 1 格 = 100%）。
+   全程不透明：起点正好盖住原来那团灰，终点正好盖住新位置那团灰，中间是平移。 */
+@keyframes fxfly{
+  0%{transform:translate(0,0) scale(1)}
+  38%{transform:translate(calc(var(--dx) * .38),calc(var(--dy) * .38)) scale(1.1)}
+  100%{transform:translate(var(--dx),var(--dy)) scale(1)}
+}
+/* 到达时落点轻轻洇一下，接上「这团灰现在在这儿」，不做大闪光 */
+.fxland{position:absolute;width:11.12%;height:11.12%;transform:translate(-50%,-50%);
+  pointer-events:none;z-index:4}
+.fxland::after{content:'';position:absolute;inset:2%;border-radius:46% 54% 44% 56%/56% 44% 58% 42%;
+  background:radial-gradient(circle at 42% 38%,
+    rgba(126,42,36,.55) 0%,rgba(126,42,36,.3) 42%,rgba(126,42,36,0) 74%);
+  animation:fxland .6s ease-out forwards}
+@keyframes fxland{
+  0%{transform:scale(1.28);opacity:.85}
+  100%{transform:scale(1);opacity:0}
+}
+
+/* ── 阶段切换：明 / 暗 / 夺 闪一下大字，解决切换太突兀 ──────── */
+#phasefx{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;z-index:60}
+#phasefx .ph{position:absolute;font-size:58px;font-weight:700;letter-spacing:10px;
+  opacity:0;animation:phflash 1.05s cubic-bezier(.2,.7,.3,1) forwards}
+#phasefx .ph.ming{color:#7e1a14;text-shadow:0 0 18px rgba(255,246,232,.95),0 0 40px rgba(163,26,20,.45)}
+#phasefx .ph.an{color:#42525f;text-shadow:0 0 18px rgba(250,248,242,.95),0 0 40px rgba(78,96,112,.5)}
+#phasefx .ph.duo{color:#5c6b4f;text-shadow:0 0 18px rgba(250,248,242,.95),0 0 40px rgba(110,140,100,.45)}
+#phasefx .ph.start{font-size:34px;letter-spacing:6px;color:#3f3a32;
+  text-shadow:0 0 18px rgba(250,248,242,.95),0 0 34px rgba(120,100,70,.4)}
+/* 终局：跟开局那条对称。大捷是实打实的红金，和局是灰。 */
+#phasefx .ph.zhong{font-size:36px;letter-spacing:8px;color:#8f1d14;
+  text-shadow:0 0 20px rgba(255,244,224,.98),0 0 44px rgba(163,26,20,.6),0 0 74px rgba(176,132,52,.45)}
+#phasefx .ph.he{font-size:34px;letter-spacing:8px;color:#5a5348;
+  text-shadow:0 0 18px rgba(250,248,242,.95),0 0 34px rgba(110,100,80,.45)}
+@keyframes phflash{
+  0%{transform:scale(.72);opacity:0}
+  22%{transform:scale(1);opacity:1}
+  62%{transform:scale(1);opacity:1}
+  100%{transform:scale(1.18);opacity:0}
+}
+
+/* 明轮结算：金币从最大块上旋一下（同时，不逐个）
+   注意别用 .cell::after —— 棋子的圆正好也画在 ::after 上，会互相顶掉。
+   所以走 #fx 图层，跟成灰特效共用一套定位。 */
+.fxcoin{position:absolute;width:11.12%;height:11.12%;pointer-events:none;
+  transform:translate(-50%,-50%);z-index:4}
+.fxcoin::after{content:'';position:absolute;inset:-14%;border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(255,240,190,.95) 0 16%,rgba(226,180,68,.85) 22% 30%,rgba(226,180,68,.28) 44%,rgba(226,180,68,0) 70%);
+  animation:coinspin 1.15s cubic-bezier(.25,.8,.3,1) forwards}
+@keyframes coinspin{
+  0%{transform:rotate(0deg) scale(.35);opacity:0}
+  18%{transform:rotate(24deg) scale(1.05);opacity:1}
+  50%{transform:rotate(150deg) scale(1.18);opacity:1}
+  78%{transform:rotate(238deg) scale(1.05);opacity:.9}
+  100%{transform:rotate(360deg) scale(.5);opacity:0}
+}
+
 /* ── 成灰特效：杀（红，主动）／劫（蓝灰，无妄之灾）──────── */
 #fx{position:absolute;inset:0;pointer-events:none;z-index:20}
 .fx{position:absolute;width:11.12%;height:11.12%;pointer-events:none;
@@ -176,6 +290,68 @@ body{
   22%{transform:scale(1.4);opacity:1}
   60%{transform:scale(1.15);opacity:.95}
   100%{transform:scale(1.3) translateY(-15px);opacity:0}
+}
+
+/* ── 禁入点：金框。平横三格、垂竖三格，各是一个细长的框；荒 3×3 是一个大框。
+   框用 SVG 图层画（.zonebox），因为横三格与 3×3 的长宽比差太多，
+   用 CSS 的等宽格子拼不出来一个完整的框。 ── */
+#zones{position:absolute;inset:0;pointer-events:none;z-index:18}
+#zones svg{position:absolute;inset:0;width:100%;height:100%}
+.zonebox{fill:none;stroke:rgba(186,142,58,.92);stroke-width:.055;
+  filter:drop-shadow(0 0 .04px rgba(255,238,200,.95));
+  animation:zbox 1.15s cubic-bezier(.2,.8,.25,1) forwards}
+@keyframes zbox{
+  0%{stroke-opacity:0;stroke-width:.012}
+  30%{stroke-opacity:1;stroke-width:.075}
+  100%{stroke-opacity:.86;stroke-width:.05}
+}
+/* 框里面的一层淡淡的金雾，让「封住了」这件事看得出来 */
+.zonefill{fill:rgba(196,152,66,.09);stroke:none;animation:zfill .9s ease-out forwards}
+@keyframes zfill{0%{opacity:0}100%{opacity:1}}
+/* 格子本身压暗一点，配合金框 */
+.cell.forb::before{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(135deg,rgba(150,116,52,.10) 0 3px,rgba(150,116,52,0) 3px 7px);
+  pointer-events:none;z-index:0}
+
+/* ── 覆：押下的那一格画一个红 ×（只有自己看得见，暗轮一结束才结算）
+     × 用两条对角渐变拼出来，整体缓慢自转；z-index 压在棋子之上，所以点对方棋子时也看得见，
+     但只画那两道杠，棋子本身照样露着 —— 要等暗轮结算它才碎。
+     只用 ::before：::after 已经被棋子本体占着，不能抢。 ── */
+.cell.fum::before{
+  content:'';position:absolute;left:50%;top:50%;width:82%;height:82%;
+  transform:translate(-50%,-50%);z-index:3;pointer-events:none;
+  background:
+    linear-gradient(45deg,rgba(224,58,38,0) 43%,rgba(224,58,38,.95) 43% 57%,rgba(224,58,38,0) 57%),
+    linear-gradient(-45deg,rgba(224,58,38,0) 43%,rgba(224,58,38,.95) 43% 57%,rgba(224,58,38,0) 57%);
+  filter:drop-shadow(0 0 5px rgba(224,58,38,.85)) drop-shadow(0 0 11px rgba(224,58,38,.4));
+  animation:fuxspin 3.4s linear infinite;
+}
+@keyframes fuxspin{0%{transform:translate(-50%,-50%) rotate(0deg)}100%{transform:translate(-50%,-50%) rotate(360deg)}}
+
+/* ── 覆：结算时那颗子当场碎掉消散 —— 碎片大小不一、带同色高光，往四周炸开后没了 ── */
+.fxbreak{position:absolute;width:11.12%;height:11.12%;pointer-events:none;
+  transform:translate(-50%,-50%);z-index:6}
+/* 先炸一团深色墨气 —— 有了这个底，碎屑才不显得「水」（用户 m04146） */
+.fxbreak::before{content:'';position:absolute;left:50%;top:50%;width:40%;height:40%;
+  border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 46% 44%,rgba(26,22,20,.92) 0%,rgba(26,22,20,.62) 38%,rgba(20,17,15,.24) 66%,rgba(20,17,15,0) 78%);
+  animation:bring .5s ease-out forwards}
+.fxbreak i{position:absolute;left:50%;top:50%;
+  background:radial-gradient(circle at 34% 28%,#5e5a55 0%,#2a2724 38%,#0c0b0a 100%);
+  box-shadow:0 0 4px rgba(10,8,6,.85);
+  border-radius:26% 74% 52% 48%/48% 52% 46% 54%;
+  animation:bshard .88s cubic-bezier(.22,.08,.42,1) forwards}
+/* 白子碎出来的也是深色 —— 沾了墨的碎渣，不是白粉 */
+.fxbreak i.w{background:radial-gradient(circle at 34% 28%,#8d867a 0%,#4a453e 42%,#1d1a16 100%)}
+@keyframes bshard{
+  0%{transform:translate(-50%,-50%) rotate(0deg) scale(1);opacity:1}
+  62%{opacity:.94}
+  100%{transform:translate(calc(-50% + var(--sx)),calc(-50% + var(--sy))) rotate(var(--rot)) scale(.22);opacity:0}
+}
+@keyframes bring{
+  0%{opacity:0;width:26%;height:26%}
+  32%{opacity:1;width:92%;height:92%}
+  100%{opacity:0;width:150%;height:150%}
 }
 /* 杀才震；劫不震 —— 一个是动手，一个是天灾 */
 #board.hit{animation:hit .34s cubic-bezier(.36,.07,.19,.97)}
@@ -225,6 +401,38 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
 .item button{font-size:12px;padding:8px 12px;min-width:0;border-radius:9px}
 #sheet .close{display:block;width:100%;margin-top:12px;background:rgba(255,255,255,.6);color:#3f3a32;
   box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
+
+/* ── 技能介绍浮层（点技能栏后面的 ? 才弹）────────────── */
+#tip{position:fixed;inset:0;background:rgba(40,34,26,.42);display:none;place-items:center;z-index:52;padding:20px}
+#tip.on{display:grid}
+#tipBox{background:#f7f2e6;border-radius:14px;padding:16px;width:min(94vw,320px);
+  box-shadow:0 18px 44px rgba(40,30,18,.34)}
+#tipBox h3{margin:0 0 6px;font-size:15px;letter-spacing:1px}
+#tipBox .ds{font-size:12px;color:#6b6252;line-height:1.7}
+#tipBox .cd{font-size:11px;color:#8a7f6b;margin-top:8px;line-height:1.6;white-space:pre-line}
+#tipBox button{display:block;width:100%;margin-top:12px;background:rgba(255,255,255,.6);color:#3f3a32;
+  box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
+
+/* 顶栏右上角的「规则」小按钮 —— 不抢眼，需要的时候找得到就行 */
+#rulesBtn{flex:none;font:inherit;font-size:11px;line-height:1;padding:4px 7px;border-radius:7px;
+  background:rgba(140,110,60,.13);color:#6a5636;border:0;cursor:pointer;white-space:nowrap;
+  box-shadow:inset 0 0 0 1px rgba(140,110,60,.2)}
+/* 认输：比「规则」还低调，暗红色，不至于被误点也不至于找不到 */
+#resignBtn{flex:none;font:inherit;font-size:11px;line-height:1;padding:4px 7px;border-radius:7px;
+  background:rgba(150,50,40,.1);color:#8a3a30;border:0;cursor:pointer;white-space:nowrap;display:none;
+  box-shadow:inset 0 0 0 1px rgba(150,50,40,.22)}
+#resignBtn.on{display:block}
+#rules{position:fixed;inset:0;background:rgba(40,34,26,.5);display:none;place-items:center;z-index:53;padding:16px}
+#rules.on{display:grid}
+#rulesBox{background:#f7f2e6;border-radius:14px;padding:18px 18px 14px;width:min(94vw,420px);max-height:86vh;
+  overflow:auto;box-shadow:0 18px 44px rgba(40,30,18,.36)}
+#rulesBox h3{margin:0 0 10px;font-size:16px;letter-spacing:2px}
+#rulesBox .rsec{margin-bottom:10px}
+#rulesBox .rsec b{display:block;font-size:12px;color:#7a5c2e;letter-spacing:1px;margin-bottom:2px}
+#rulesBox .rsec p{margin:0;font-size:12px;color:#5f594c;line-height:1.75}
+#rulesBox .rsec em{font-style:normal;color:#8f2a20;font-weight:700}
+#rulesBox button{display:block;width:100%;margin-top:8px;background:rgba(255,255,255,.6);color:#3f3a32;
+  box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
 </style>
 </head>
 <body>
@@ -236,16 +444,25 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     <div id="ashbar"></div>
     <span id="ashTxt"></span>
   </div>
+  <button id="rulesBtn">规则</button>
+  <button id="resignBtn">认输</button>
 </div>
 
 <div id="sides">
-  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="qibar"></div><div class="sc"></div><div class="cn">0<small>币</small></div><div class="it"></div></div>
-  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">敌</div><div class="qibar"></div><div class="sc"></div><div class="cn">0<small>币</small></div><div class="it"></div></div>
+  <div class="side" id="sideMe">
+    <div class="r1"><div class="dot"></div><div class="nm">你</div><div class="qibar"></div></div>
+    <div class="r2"><div class="sks"></div><div class="it"></div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
+  </div>
+  <div class="side" id="sideOpp">
+    <div class="r1"><div class="dot"></div><div class="nm">敌</div><div class="qibar"></div></div>
+    <div class="r2"><div class="sks"></div><div class="it"></div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
+  </div>
 </div>
 
 <div id="wrap"><div id="board">
   <svg viewBox="0 0 9 9" preserveAspectRatio="none" id="lines"></svg>
   <div id="grid"></div>
+  <div id="zones"><svg id="zsvg" viewBox="0 0 9 9" preserveAspectRatio="none"></svg></div>
   <div id="fx"></div>
 </div></div>
 
@@ -263,13 +480,74 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
   <button class="close" id="shopClose">关上</button>
 </div></div>
 
+<div id="tip"><div id="tipBox">
+  <h3 id="tipName"></h3>
+  <div class="ds" id="tipDesc"></div>
+  <div class="cd" id="tipCd"></div>
+  <button id="tipClose">知道了</button>
+</div></div>
+
+<div id="rules"><div id="rulesBox">
+  <h3>怎么玩</h3>
+  <div class="rsec">
+    <b>主循环</b>
+    <p>每一轮先<em>夺</em>（双方暗出气抢先手，同价可再加，都不加这轮直接打暗轮），
+    然后<em>明轮</em>先手落一子、后手落一子；明轮打完必定接一个<em>暗轮</em>，
+    双方同时暗落一子。标准 20 轮，极简 5 轮。</p>
+  </div>
+  <div class="rsec">
+    <b>气</b>
+    <p>只用来抢先手。每轮各 +1，杀掉一子额外 +1。上限跟弈士走，溢出的浪费。
+    夺输了不扣，赢了当场花掉（不转给对手）。</p>
+  </div>
+  <div class="rsec">
+    <b>币</b>
+    <p>只用来买东西。起手 2 个。<em>每打完一个明轮</em>，双方各按自己当前最大连通块的大小拿币。</p>
+  </div>
+  <div class="rsec">
+    <b>地</b>
+    <p>就是你自己棋子连成的一片。终局比的是「连通块从大到小排成序列，逐项比大小」——
+    先比最大块，一样大就比第二块，以此类推。界面上的「地」是当前最大块。</p>
+  </div>
+  <div class="rsec">
+    <b>杀</b>
+    <p>明轮里轮到你落子时，可以点对手一颗<em>上一轮或更早</em>落下的子，把它连格带子烧成劫灰。
+    这一手就不落子了。当轮刚落下的子杀不动。</p>
+  </div>
+  <div class="rsec">
+    <b>劫</b>
+    <p>暗轮里两人选中同一格，两手都作废，那格成灰。谁也没落成子。</p>
+  </div>
+  <div class="rsec">
+    <b>劫灰</b>
+    <p>成灰的格子谁都不能用，永久空着。灰是最重要的公共资源 ——
+    前十格是第一阶段，出现第十一格起棋盘进入第二阶段。</p>
+  </div>
+  <div class="rsec">
+    <b>商店与技能</b>
+    <p>请自由探索。</p>
+  </div>
+  <div class="rsec">
+    <b>怎么算赢</b>
+    <p>打满轮数后比连通块序列，大的一方赢；完全一样是平局。</p>
+  </div>
+  <button id="rulesClose">知道了</button>
+</div></div>
+
+<div id="phasefx"></div>
+
 <script>
 (function () {
   'use strict';
   var EMPTY = 0, BLACK = 1, WHITE = 2, ASH = 3;
   var N = 9;
 
-  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false, shieldPick: false, fxSeen: -1 };
+  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false, shieldPick: false,
+            skillPick: false, skillFrom: null, skillK: 0, tipOpen: false, rules: false,
+            fuPick: null, eatPick: null,
+            fxSeen: 0, fxInit: false, modeSeen: 0, modeInit: false, incomeSeen: 0, incomeInit: false,
+            moveSeen: 0, moveInit: false, zoneSeen: 0, zoneInit: false,
+            breakSeen: 0, breakInit: false };
 
   function $(s) { return document.querySelector(s); }
   function nameOf(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].name; return id; }
@@ -373,15 +651,42 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
   function onCell() {
     var v = S.view; if (!v || v.over || !v.both) return;
     var i = +this.dataset.i;
-    // 盾位：点自己的一颗老子，罩上盾
+    // 技能选格：拂尘要「灰 → 空位」两步；覆只要「点一个格子」一步，
+    // 但覆是「一次性的关键大招」，点完要再确认一次才好（用户 m04146）。
+    if (S.skillPick) {
+      var sk0 = skillByK(S.skillK);
+      if (!sk0 || !sk0.ready) { S.skillPick = false; S.skillFrom = null; S.note = '现在不能发动'; render(); return; }
+      if (sk0.id === 'fu') {
+        var cc0 = v.cells[i];
+        if (cc0 !== EMPTY && cc0 !== (1 - v.seat) + 1) { S.note = '只能点空格或对方的子'; render(); return; }
+        S.fuPick = i;
+        S.note = '';
+        render();
+        return;
+      }
+      if (sk0.id !== 'fuchen') { S.skillPick = false; S.skillFrom = null; render(); return; }
+      if (S.skillFrom == null) {
+        if (v.cells[i] !== ASH) { S.note = '先点一格劫灰'; render(); return; }
+        S.skillFrom = i; S.note = ''; render(); return;
+      }
+      if (v.cells[i] !== EMPTY) { S.note = '要挪到空着的位置'; render(); return; }
+      var from0 = S.skillFrom;
+      S.skillPick = false; S.skillFrom = null; S.note = '';
+      act({ type: 'skill', k: S.skillK, from: from0, to: i });
+      return;
+    }
+    // 盾位：点自己的一颗老子，罩上盾。罩完不退出 —— 手里还有盾就接着罩下一颗。
     if (S.shieldPick) {
       if (v.need !== 'hidden') { S.shieldPick = false; S.note = '盾只能在自己暗轮落子前用'; render(); return; }
       if (v.cells[i] !== S.view.seat + 1) { S.note = '盾只能罩自己的子'; render(); return; }
-      S.shieldPick = false;
+      S.note = '';
       act({ type: 'use', id: 'shield', cell: i });
       return;
     }
     if (v.need === 'place' || v.need === 'second') {
+      // 禁入点（正辩封的）和自己覆押的 × 都落不进去
+      if ((v.forbidden || []).indexOf(i) >= 0) { S.note = '那是禁入点，落不了'; render(); return; }
+      if (v.myFu != null && v.myFu === i) { S.note = '这格你自己押了覆，不能往这儿落'; render(); return; }
       var isKill = (v.killTargets || []).indexOf(i) >= 0;
       if (isKill) { act({ type: 'place', cell: i }); return; }
       if (v.cells[i] !== EMPTY) return;
@@ -395,6 +700,7 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       act({ type: 'place', cell: i });
     } else if (v.need === 'hidden') {
       if (v.cells[i] !== EMPTY) return;
+      if (v.myFu != null && v.myFu === i) { S.note = '这格你自己押了覆，不能往这儿落'; render(); return; }
       S.sel = i; render();
     }
   }
@@ -402,34 +708,80 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
   function render() {
     var v = S.view; if (!v) return;
     var me = v.seat, op = 1 - v.seat;
+    // 特效顺序刻意这么排：先看成灰（杀/劫），再看自己赚了多少金币，
+    // 最后才闪阶段大字。三个都走同一条 fxSlot 时间轴，不会同时糊在屏幕上。
     processFx(v);
+    processMove(v);
+    processBreak(v);
+    processZone(v);
+    processIncome(v);
+    processMode(v);
 
-    // ── 选人界面（只有一个无锋，但流程留着）
+    // 安全阀：技能选格选到一半，阶段已经过了（自己落完了 / 对手先动了）→ 自动退出。
+    if (S.skillPick) {
+      var skSafe = skillByK(S.skillK);
+      if (!skSafe || !skSafe.ready) { S.skillPick = false; S.skillFrom = null; S.fuPick = null; }
+    }
+    // 安全阀：荒的「吃掉哪一支」选到一半，技能不再可用 → 自动退出
+    if (S.eatPick) {
+      var epSafe = skillByK(S.eatPick.k);
+      if (!epSafe || !epSafe.ready) { S.eatPick = null; }
+    }
+    // 安全阀：选盾位选到一半，暗轮已经过去了（自己落完子 / 对手先结算）→ 自动退出。
+    // 不然界面上还挂着「选盾位」的提示和按钮，但服务端不认，点哪儿都报错。
+    if (S.shieldPick && (!v.both || v.over || v.need !== 'hidden')) {
+      S.shieldPick = false;
+      S.note = '盾只能在暗轮落子前用 —— 现在过了这个点。';
+    }
+    // 安全阀：覆押好了但还没确认，阶段过了 → 丢掉，别让它挂在那儿挡着后面的操作
+    if (S.fuPick != null && (!S.skillPick || v.need !== 'hidden')) S.fuPick = null;
+
+    // ── 选人界面：两步走 —— ① 先定模式（双方选成一样）② 再选弈士
     if (v.picking) {
       for (var q = 0; q < N * N; q++) cells[q].className = 'cell';
-      var m = v.myPick ? '你选了 <em>' + nameOf(v.champs, v.myPick) + '</em>。' : '选一个弈士，双方选完即开局。';
-      if (!v.both) m = '把地址发给朋友等他进桌 —— 或者再开一个浏览器标签页自己试。<br>两人到齐后选弈士开局。';
-      if (v.myPick && !v.oppPicked) m += '<br>等对手选…';
-      $('#msg').innerHTML = m;
       $('#roundTxt').textContent = '';
-
       var bx = $('#btns'); bx.innerHTML = '';
-      if (v.both && !v.myPick) {
-        v.champs.forEach(function (c) {
-          var el = document.createElement('button');
-          el.textContent = c.name + ' · ' + c.tag;
-          el.className = 'ghost';
-          el.onclick = function () { act({ type: 'champ', id: c.id }); };
-          bx.appendChild(el);
-        });
-      }
       var desc = document.createElement('div');
       desc.style.cssText = 'font-size:11px;color:#8a8070;text-align:center;line-height:1.7;margin-top:8px';
-      if (v.both && !v.myPick) {
-        desc.innerHTML = v.champs.map(function (c) {
-          return '<b>' + c.name + '</b>　' + c.desc + '（起手 ' + c.coins + ' 币）';
-        }).join('<br>');
+
+      if (!v.both) {
+        $('#msg').innerHTML = '把地址发给朋友等他进桌 —— 或者再开一个浏览器标签页自己试。<br><s>两人到齐先商量模式，模式选成一样才能开局。</s>';
+      } else if (!v.modeAgreed) {
+        // 第一步：模式
+        var mTxt = '先定<b>模式</b>。双方要选成一样才能开局。';
+        var mineDesc = v.myMode ? ('你选了 <em>' + nameOf(v.modes, v.myMode) + '</em>') : '你还没选';
+        var oppDesc = v.oppMode ? ('对手选了 <em>' + nameOf(v.modes, v.oppMode) + '</em>') : '对手还没选';
+        $('#msg').innerHTML = mTxt + '<br><s>' + mineDesc + '　·　' + oppDesc + '</s>';
+        (v.modes || []).forEach(function (mo) {
+          var el = document.createElement('button');
+          el.textContent = mo.name + ' · ' + mo.rounds + ' 轮';
+          el.className = v.myMode === mo.id ? 'accentbtn' : 'ghost';
+          el.onclick = function () { act({ type: 'mode', id: mo.id }); };
+          bx.appendChild(el);
+        });
+        var cur = null;
+        (v.modes || []).forEach(function (mo) { if (mo.id === v.myMode) cur = mo; });
+        if (cur) desc.innerHTML = '<span style="color:#6f6558">' + cur.name + '：' + cur.desc + '</span>';
+      } else {
+        // 第二步：弈士（模式已定死）
+        var md = null;
+        (v.modes || []).forEach(function (mo) { if (mo.id === v.mode) md = mo; });
+        var m2 = v.myPick ? '你选了 <em>' + nameOf(v.champs, v.myPick) + '</em>。' : '模式定了：<em>' + (md ? md.name : '') + '</em>。选一个弈士，双方选完即开局。';
+        if (v.myPick && !v.oppPicked) m2 += '<br>等对手选…';
+        $('#msg').innerHTML = m2;
+        if (!v.myPick) {
+          (v.champs || []).forEach(function (c) {
+            var el = document.createElement('button');
+            el.textContent = c.name;
+            el.className = 'ghost';
+            el.onclick = function () { act({ type: 'champ', id: c.id }); };
+            bx.appendChild(el);
+          });
+        }
+        // 选人阶段**不写技能说明** —— 只给名字，技能靠自己上手摸（用户 m03244）。
+        desc.innerHTML = '<span style="color:#6f6558">' + (md ? md.desc : '') + '</span>';
       }
+
       var cpBtn = document.createElement('button');
       cpBtn.className = 'ghost'; cpBtn.textContent = '复制邀请链接';
       cpBtn.onclick = copyLink;
@@ -444,19 +796,31 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     $('#log').style.height = '15px';
 
     // ── 顶栏
-    var modeTxt = (v.phase === 'auction' || v.phase === 'tie-raise' || v.phase === 'raise' || v.phase === 'order')
-      ? '竞拍' : v.roundMode === 'open' ? '明轮' : v.roundMode === 'hidden' ? '暗轮' : '';
+    // 竞拍阶段只写「夺」，不写「竞拍」两个字（用户 m03487 要求去掉）。
+    var modeTxt = (v.phase === 'auction' || v.phase === 'tie-raise' || v.phase === 'raise')
+      ? '夺' : v.roundMode === 'open' ? '明轮' : v.roundMode === 'hidden' ? '暗轮' : '';
     $('#roundTxt').textContent = v.round + '/' + v.totalRounds + ' 轮 · ' + modeTxt;
+    // 认输按钮：开局后才出现，终局后收起
+    var rb = $('#resignBtn');
+    if (rb) { if (v.both && !v.over) rb.classList.add('on'); else rb.classList.remove('on'); }
     var ab = $('#ashbar'); ab.innerHTML = '';
-    // 劫灰格子数跟着「这局最多可能有多少灰」走，不是死写 14：
-    // 9×9 最多 81 格，但一局实际就十来格，留一点余量按 10 的倍数加。
-    var pips = Math.max(12, Math.ceil((v.ashCount + 2) / 10) * 10);
+    // 劫灰：固定 10 个格子（第一阶段的量）。
+    // 出现第 11 个灰 → 整局进第二阶段：棋盘边缘发烫、格子变色，
+    // 计数改成「11 .. 20」这一段（超过 20 就按 20 封顶显示，实际很少见）。
+    var PHASE1 = 10;
+    var p2 = v.ashCount > PHASE1;
+    $('#meta').className = p2 ? 'p2' : '';
+    var boardEl = $('#board');
+    if (p2) boardEl.classList.add('p2'); else boardEl.classList.remove('p2');
+    var pips = PHASE1;
+    var filled = p2 ? Math.min(PHASE1, v.ashCount - PHASE1) : Math.min(PHASE1, v.ashCount);
     for (var k = 0; k < pips; k++) {
       var e = document.createElement('i');
-      if (k < v.ashCount) e.className = 'on';
+      if (k < filled) e.className = 'on';
       ab.appendChild(e);
     }
-    $('#ashTxt').textContent = v.ashCount;
+    // 第一阶段：10 格代表 1..10；第 11 个灰起进第二阶段，同样 10 格改代表 11..20
+    $('#ashTxt').textContent = p2 ? v.ashCount : (v.ashCount + ' / ' + PHASE1);
 
     // ── 双方：气（血量条）+ 实时计分（当前最大连通块）+ 持币 + 道具栏
     var scores = v.scores || [0, 0];
@@ -469,14 +833,69 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       for (var i3 = 0; i3 < cap; i3++) {
         qb.children[i3].className = i3 < q ? 'on' : '';
       }
+      // 技能栏：第二行顶头。每个技能一个小按钮；自己的能点（带「?」看介绍），
+      // 对手的只给名字和状态（想弄明白靠自己看）。
+      var sksEl = $(pre + ' .sks');
+      var mine = (who === me) ? (v.skills || []) : (v.skillsOpp || []);
+      var show = mine.length && !v.over && !v.picking;
+      if (show) {
+        sksEl.className = 'sks has';
+        while (sksEl.children.length < mine.length) {
+          var box = document.createElement('span');
+          box.className = 'skbox';
+          box.appendChild(document.createElement('button'));
+          box.appendChild(document.createElement('button'));
+          sksEl.appendChild(box);
+        }
+        while (sksEl.children.length > mine.length) sksEl.removeChild(sksEl.lastChild);
+        for (var k2 = 0; k2 < mine.length; k2++) {
+          (function (kk) {
+            var sk = mine[kk];
+            var isMe = (who === me);
+            var box = sksEl.children[kk];
+            var b = box.children[0], inf = box.children[1];
+            // 拂尘得盘上真有灰才能挪 —— 没灰的时候按钮是灰的，别让人点了白点
+            var noTarget = isMe && sk.id === 'fuchen' && !(v.ashCount > 0);
+            var used = !!sk.used;
+            b.className = 'sk' + (isMe && sk.ready && !noTarget ? ' ready' : '') +
+              (isMe && S.skillPick && S.skillK === kk ? ' sel' : '') +
+              (used ? ' used' : '') +
+              (isMe && v.arm && v.arm === sk.id ? ' armed' : '');
+            var cdTxt;
+            // 用掉的分支直接从列表里消失（引擎侧就不发了），所以这里不需要「用完」。
+            // 「缺气」只在真缺气时写；气够、只是这一手轮不到你 → 一律写「就绪」，靠按钮置灰表达。
+            // 对手那边拿不到 enough（服务端故意只给名字和冷却），所以永远不替他判断缺不缺气。
+            if (noTarget) cdTxt = '无灰';
+            else if (sk.wait > 0) cdTxt = '还' + sk.wait;
+            else if (isMe && !sk.enough) cdTxt = '缺气';
+            else cdTxt = '就绪';
+            b.innerHTML = sk.name + '<i>' + cdTxt + '</i>';
+            b.disabled = !isMe || !sk.ready || S.skillPick || noTarget;
+            b.onclick = isMe ? function () { startSkill(kk); } : null;
+            if (isMe) {
+              inf.className = 'info has';
+              inf.textContent = '?';
+              inf.onclick = function () { openTip(kk); };
+            } else {
+              inf.className = 'info';
+              inf.onclick = null;
+            }
+          })(k2);
+        }
+      } else {
+        sksEl.className = 'sks';
+        sksEl.innerHTML = '';
+      }
+      // 地和币排最后
       $(pre + ' .sc').innerHTML = '地 <b>' + (scores[who] || 0) + '</b>';
       $(pre + ' .cn').innerHTML = (v.coins[who] || 0) + '<small>币</small>';
       var own = (v.items[who] || []).length;
       var sh = (v.shields && v.shields[who]) ? v.shields[who].length : 0;
       var itEl = $(pre + ' .it');
-      if (own) {
+      if (own || sh) {
         itEl.className = 'it has';
-        itEl.textContent = '盾' + own + (sh ? '/用' + sh : '');
+        itEl.textContent = own ? ('盾' + own + (sh ? '·护' + sh : '')) : ('护' + sh);
+        itEl.title = '盾 ' + own + ' 件；已护住 ' + sh + ' 颗子';
       } else {
         itEl.className = 'it';
         itEl.textContent = '';
@@ -492,6 +911,7 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     // ── 棋盘
     var anchors = v.need === 'second' ? (v.anchors || []) : [];
     var jt = (v.need === 'place' || v.need === 'second') ? (v.killTargets || []) : [];
+    var forb = v.forbidden || [];
     var shCells = [];
     if (v.shields) shCells = v.shields[0].concat(v.shields[1]);
     for (var i2 = 0; i2 < N * N; i2++) {
@@ -500,22 +920,123 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       if (anchors.indexOf(i2) >= 0) cls += ' anchor';
       if (jt.indexOf(i2) >= 0) cls += ' kill';
       if (shCells.indexOf(i2) >= 0) cls += ' sh';
+      if (forb.indexOf(i2) >= 0) cls += ' forb';
+      if (v.myFu != null && v.myFu === i2) cls += ' fum';
       if (v.lastCell != null && v.lastCell === i2) cls += ' last';
       if (S.sel === i2) cls += ' sel';
-      if (S.shieldPick) {
+      if (S.skillPick) {
+        // 拂尘：还没选灰 → 只有灰格能点；选了灰 → 只有空格能点
+        // 覆：点空格或对方的子，点完还要确认一次
+        var skc = skillByK(S.skillK);
+        if (skc && skc.id === 'fu') {
+          if (c === EMPTY || c === op + 1) cls += ' tap';
+          if (S.fuPick != null && S.fuPick === i2) cls += ' sel';
+        }
+        else if (S.skillFrom == null) { if (c === ASH) cls += ' ashpick'; }
+        else {
+          if (i2 === S.skillFrom) cls += ' sel';
+          else if (c === EMPTY) cls += ' tap';
+        }
+      } else if (S.shieldPick) {
         if (c === me + 1) cls += ' tap';
-      } else if (v.need === 'place') cls += ' tap';
+      } else if (v.need === 'place') cls += (forb.indexOf(i2) >= 0 || (v.myFu != null && v.myFu === i2) ? '' : ' tap');
       else if (v.need === 'second') {
         if (jt.indexOf(i2) >= 0) cls += ' tap';
-        else if (c === EMPTY && (anchors.length === 0 || anchors.indexOf(i2) >= 0)) cls += ' tap';
-      } else if (v.need === 'hidden' && c === EMPTY) cls += ' tap';
+        else if (c === EMPTY && forb.indexOf(i2) < 0 && !(v.myFu != null && v.myFu === i2) && (anchors.length === 0 || anchors.indexOf(i2) >= 0)) cls += ' tap';
+      } else if (v.need === 'hidden' && c === EMPTY && !(v.myFu != null && v.myFu === i2)) cls += ' tap';
       cells[i2].className = cls;
     }
 
     // ── 消息 + 按钮
     var msg = '', btns = [];
+    if (S.skillPick) {
+      var skp = skillByK(S.skillK);
+      if (!skp || !skp.ready) {
+        S.skillPick = false; S.skillFrom = null;
+        S.note = '这个技能现在不能发动了。';
+        render(); return;
+      }
+      if (skp.id === 'fu') {
+        if (S.fuPick != null) {
+          var fuC = v.cells[S.fuPick];
+          var fuWhere = '第 ' + (S.fuPick + 1) + ' 格';
+          msg = (fuC === EMPTY)
+            ? '<em>覆</em> —— 押在 ' + fuWhere + ' 这个空格上：对面这一手要是正落这儿，那子当场碎；落别处就白花。<br>确认一下。'
+            : '<em>覆</em> —— 盯上 ' + fuWhere + ' 那颗子：暗轮一结算它就碎，盾也挡不住。<br>确认一下。';
+          btns.push({
+            t: (fuC === EMPTY ? '就押这儿' : '就它了'), accent: true, f: function () {
+              var pk = S.fuPick; S.skillPick = false; S.fuPick = null; S.note = '';
+              act({ type: 'skill', k: S.skillK, cell: pk });
+            }
+          });
+          btns.push({ t: '重选', ghost: true, f: function () { S.fuPick = null; render(); } });
+        } else {
+          msg = '<em>' + skp.name + '</em> —— 点一个空格赌对面落那儿，或者直接点对面一颗子，暗轮结算时抹掉它。';
+        }
+      } else if (S.skillFrom == null) {
+        msg = '<em>' + skp.name + '</em> —— 先点一格劫灰。';
+      } else {
+        msg = '<em>' + skp.name + '</em> —— 再点一个空位，把这团灰挪过去。';
+        btns.push({ t: '重选灰', ghost: true, f: function () { S.skillFrom = null; render(); } });
+      }
+      btns.push({ t: '算了', ghost: true, f: cancelSkill });
+      $('#msg').innerHTML = msg;
+      var bxK = $('#btns'); bxK.innerHTML = '';
+      btns.forEach(function (b4) {
+        var el4 = document.createElement('button');
+        el4.textContent = b4.t;
+        el4.className = b4.accent ? 'accentbtn' : 'ghost';
+        el4.onclick = b4.f;
+        bxK.appendChild(el4);
+      });
+      $('#log').textContent = '';
+      $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
+      S.shop = false; renderShop();
+      return;
+    }
+    // 荒：先选吃掉平还是垂（用户要自己定，不自动挑）
+    if (S.eatPick) {
+      var ep = S.eatPick;
+      var epk = skillByK(ep.k);
+      if (!epk || !epk.ready) { S.eatPick = null; S.note = '现在不能发动荒了。'; render(); return; }
+      msg = '<em>荒</em> —— 先选这一手要吃掉哪一支。吃掉的那支以后就没了（荒自己不算次数）。';
+      if (ep.canP) btns.push({
+        t: '吃掉平', accent: true, f: function () {
+          var kk = ep.k; S.eatPick = null; S.note = '';
+          act({ type: 'skill', k: kk, eat: 'ping' });
+        }
+      });
+      if (ep.canC) btns.push({
+        t: '吃掉垂', accent: true, f: function () {
+          var kk2 = ep.k; S.eatPick = null; S.note = '';
+          act({ type: 'skill', k: kk2, eat: 'chui' });
+        }
+      });
+      btns.push({ t: '算了', ghost: true, f: function () { S.eatPick = null; S.note = ''; render(); } });
+      $('#msg').innerHTML = msg;
+      var bxE = $('#btns'); bxE.innerHTML = '';
+      btns.forEach(function (b5) {
+        var el5 = document.createElement('button');
+        el5.textContent = b5.t;
+        el5.className = b5.accent ? 'accentbtn' : 'ghost';
+        el5.onclick = b5.f;
+        bxE.appendChild(el5);
+      });
+      $('#log').textContent = '';
+      $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
+      S.shop = false; renderShop();
+      return;
+    }
     if (S.shieldPick) {
-      msg = '<em>选盾位</em> —— 点一顆自己的子罩上盾。<br><s>盾挡一次杀，活过下一个明轮就没了。一个暗轮只能罩一块。</s>';
+      // 手里的盾罩完了就自动退出，不然停在「选盾位」上，点哪儿都没反应
+      var shieldLeft = (v.items[me] || []).filter(function (x) { return x === 'shield'; }).length;
+      if (shieldLeft === 0) {
+        S.shieldPick = false;
+        S.note = '盾用完了，接着落子吧。';
+        render();
+        return;
+      }
+      msg = '<em>选盾位</em> —— 点一颗自己的子罩上盾（还剩 ' + shieldLeft + ' 块）。<br><s>盾挡一次杀，活过下一个明轮就没了。想罩几块就罩几块。</s>';
       btns.push({ t: '算了', ghost: true, f: function () { S.shieldPick = false; S.note = ''; render(); } });
       $('#msg').innerHTML = msg;
       var bxS = $('#btns'); bxS.innerHTML = '';
@@ -524,6 +1045,12 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
         el3.textContent = b3.t; el3.className = 'ghost'; el3.onclick = b3.f;
         bxS.appendChild(el3);
       });
+      $('#log').textContent = '';
+      $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
+      // 关键：选盾位的时候必须把商店关掉并重画商店层，
+      // 否则浮层还盖在屏幕上、点不到棋盘 —— 这就是之前「用盾卡死」的原因。
+      S.shop = false;
+      renderShop();
       return;
     }
     if (!v.both) {
@@ -532,9 +1059,10 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     } else if (v.over) {
       var win = v.winner === me ? '你赢了' : v.winner === -1 ? '和棋' : '你输了';
       var mb = (v.blobs[me][0] || 0), ob = (v.blobs[op][0] || 0);
-      msg = '<em>' + win + '</em>　最大块 ' + mb + ' : ' + ob + '　劫灰 ' + v.ashCount;
+      var why = v.endReason === 'resign' ? '（认输）' : '';
+      msg = '<em>' + win + why + '</em>　最大块 ' + mb + ' : ' + ob + '　劫灰 ' + v.ashCount;
       btns.push({ t: '再来一局', wide: true, f: function () { act({ type: 'rematch' }); } });
-      if (v.rematch[me]) msg += '<br>等对手确认，然后重新选弈士…';
+      if (v.rematch[me]) msg += '<br>等对手确认，然后重新选模式与弈士…';
     } else if (v.need === 'bid') {
       msg = '第 ' + v.round + ' 轮 —— 暗出几<em>气</em>抢先手？<br><s>抢到的气直接花掉，不给对手；出价低的可加价，也可放弃。都不加价，这轮就直接打暗轮（不进明轮，不发币）。</s>';
       var mx = v.qi[me] || 0;
@@ -563,25 +1091,33 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
           btns.push({ t: '加到 ' + a2, accent: true, f: (function (n) { return function () { act({ type: 'raise', amount: n }); }; })(a2) });
         }
       }
-    } else if (v.need === 'order') {
-      msg = '你以 <em>' + v.auctionHi + '</em> 气抢下了先手。选自己先动，还是后动？<br><s>先手这一子本轮不会被杀，而且动手越早，占位越自由。</s>';
-      btns.push({ t: '我先动', wide: true, f: function () { act({ type: 'order', choice: 'first' }); } });
-      btns.push({ t: '让对手先', wide: true, ghost: true, f: function () { act({ type: 'order', choice: 'second' }); } });
     } else if (v.need === 'place') {
-      msg = '你先手 —— 任意空格落一子。<br><s>红圈里是可杀的棋子，点它就连子带格烧成劫灰（那一手不放子）。</s>';
+      var armTxt = v.arm ? ('<br>你已经挂了 <em>' + (ARM_TXT[v.arm] || v.arm) + '</em> —— 这一手杀成，金框就落在那儿。') : '';
+      msg = '你先手 —— 任意空格落一子。<br><s>红圈里是可杀的棋子，点它就把那颗子烧成劫灰（这一手不放子）。不想下也能过。</s>' + armTxt;
+      if (v.canGive) btns.push({ t: '让对方先走', ghost: true, f: function () { act({ type: 'give' }); } });
+      btns.push({ t: '过', ghost: true, f: function () { act({ type: 'pass' }); } });
     } else if (v.need === 'second') {
-      msg = '任意空格落一子。<br><s>红圈里是可杀的棋子，点它就直接烧成劫灰。</s>';
+      var armTxt2 = v.arm ? ('<br>你已经挂了 <em>' + (ARM_TXT[v.arm] || v.arm) + '</em> —— 这一手杀成，金框就落在那儿。') : '';
+      msg = '任意空格落一子。<br><s>红圈里是可杀的棋子，点它就把那颗子烧成劫灰。不想下也能过。</s>' + armTxt2;
+      btns.push({ t: '过', ghost: true, f: function () { act({ type: 'pass' }); } });
     } else if (v.need === 'hidden') {
       if (S.sel != null) {
         msg = '就落在一闪一闪这格？确认后不能改。';
         btns.push({ t: '确认落子', wide: true, f: function () { act({ type: 'place', cell: S.sel }); } });
         btns.push({ t: '重选', ghost: true, f: function () { S.sel = null; render(); } });
       } else {
-        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰 —— 这叫<em>劫</em>。<br><s>想护住哪颗子，就趁现在用盾（只能暗轮落子前用，一个暗轮一块）。</s>';
+        var fuTxt = '';
+        if (v.myFu != null) {
+          fuTxt = (v.myFuMode === 'kill')
+            ? ('<br>你已经用覆盯上了第 ' + (v.myFu + 1) + ' 格那颗子 —— 暗轮一结束它就碎（盾也挡不住）。')
+            : ('<br>你已经把覆押在第 ' + (v.myFu + 1) + ' 格 —— 对面要是落那儿，那子就碎了。');
+        }
+        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰 —— 这叫<em>劫</em>。<br><s>想护住哪颗子，就趁现在用盾（只能暗轮落子前用，想罩几块罩几块，只要手里有）。</s>' + fuTxt;
+        btns.push({ t: '过', ghost: true, f: function () { act({ type: 'pass' }); } });
       }
       if ((v.items[me] || []).length) btns.push({ t: '用道具 (' + (v.items[me] || []).length + ')', ghost: true, f: openShop });
     } else {
-      msg = (v.phase === 'auction' && v.myBid != null) ? '已出 <em>' + v.myBid + '</em> 币，等对手…'
+      msg = (v.phase === 'auction' && v.myBid != null) ? '已出 <em>' + v.myBid + '</em> 气，等对手…'
         : v.phase === 'tie-raise' && v.tieMine !== null ? '已选，等对手…'
           : (v.phase === 'hidden' && v.myHidden != null) ? '你的子已经落下（<em>暗</em>），对手看不到。等对手落子…'
             : '等对手行动…';
@@ -613,10 +1149,23 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       var l = v.log[v.log.length - 1];
       if (l.t === 'kill') last = (l.p === me ? '你' : '对手') + ' 杀一颗子，成劫灰';
       else if (l.t === 'jie') last = '两人撞在同一格 —— 劫，成灰';
-      else if (l.t === 'won') last = (l.p === me ? '你' : '对手') + ' 以 ' + l.price + ' 币抢下先手';
+      else if (l.t === 'won') last = (l.p === me ? '你' : '对手') + ' 以 ' + l.price + ' 气抢下先手';
       else if (l.t === 'auction-none') last = '没人加价，这轮改走暗轮';
       else if (l.t === 'buy') last = (l.p === me ? '你' : '对手') + ' 买了一件东西';
-      else if (l.t === 'order') last = (l.first === me ? '你' : '对手') + ' 先动';
+      else if (l.t === 'give') last = (l.p === me ? '你' : '对手') + ' 把先动让给了对方';
+      else if (l.t === 'pass') last = (l.p === me ? '你' : '对手') + ' 过了这一手';
+      else if (l.t === 'income') last = '结算 —— 各按最大块拿币 +' + l.coins[me] + ' / +' + l.coins[op];
+      else if (l.t === 'skill') {
+        if (l.skill === 'fuchen') last = (l.p === me ? '你' : '对手') + ' 拂尘一扫，挪走一团劫灰';
+        else if (l.skill === 'tuna') last = (l.p === me ? '你' : '对手') + ' 吐纳，气 +' + (l.got || 0);
+      }
+      else if (l.t === 'arm') last = (l.p === me ? '你' : '对手') + ' 挂了' + (ARM_TXT[l.skill] || '杀招') + '，等这一手杀成';
+      else if (l.t === 'zone') last = (l.p === me ? '你' : '对手') + ' 划下禁入点 —— ' + (ZONE_TXT[l.kind] || '');
+      else if (l.t === 'fuCast') last = (l.p === me ? '你' : '对手') + ' 押了覆，赌对面落在那一格';
+      else if (l.t === 'fu') last = l.hit
+        ? ((l.p === me ? '你' : '对手') + ' 的覆猜中了 —— 那子碎了')
+        : ((l.p === me ? '你' : '对手') + ' 的覆猜空了');
+      else if (l.t === 'resign') last = (l.p === me ? '你' : '对手') + ' 认输了';
     }
     $('#log').textContent = last;
     $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
@@ -627,44 +1176,339 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
 
   function openShop() { S.shop = true; render(); }
 
+  // ── 技能 ────────────────────────────────────────────────
+  // 选人阶段一个字都不提技能（用户要求：让玩家自己探索），
+  // 进场以后技能栏只写名字 + 冷却，想知道是干什么的点后面的「?」。
+  var SKILL_INFO = {
+    fuchen: { desc: '明轮里、轮到你落子之前发动：挑一格劫灰，把它挪到任意一个空位上去。', hint: '灰的总数不变，只是位置变了。' },
+    tuna: { desc: '暗轮里发动：气 +1。', hint: '暗轮是最安全的时机 —— 明轮里发动等于告诉对手你在攒什么。' },
+    ping: { desc: '明轮先手落子前选它：这一手如果杀成了，以新灰为中心横着三格封成禁入点。', hint: '对手这一手不能往那三格落子，杀也杀不动。没杀成就作废，不消耗次数。' },
+    chui: { desc: '明轮先手落子前选它：这一手如果杀成了，以新灰为中心竖着三格封成禁入点。', hint: '对手这一手不能往那三格落子，杀也杀不动。没杀成就作废，不消耗次数。' },
+    huang: { desc: '平或垂的替代：清空全部气（至少 4 点），把新灰周围三乘三全封成禁入点。', hint: '比平、垂多封六格，代价是气全没了，而且要用掉一次平或垂。' },
+    fu: { desc: '暗轮里清空全部气（至少 4），点一格：点空格是盲猜对面会落那儿，猜中那子碎掉；点对面一颗子则是直接盯上它，暗轮结算时它必碎 —— 有盾也挡不住。', hint: '押下的格子会画一个红 ×，只有你自己看得见，暗轮一结束就没了。红 × 那格你自己落不了。只有一次机会。' }
+  };
+  function skillByK(k) {
+    var v = S.view; if (!v) return null;
+    return (v.skills || [])[k] || null;
+  }
+  function openTip(k) {
+    var sk = skillByK(k); if (!sk) return;
+    var info = SKILL_INFO[sk.id] || { desc: '', hint: '' };
+    S.tipOpen = true;
+    $('#tipName').textContent = sk.name;
+    $('#tipDesc').textContent = info.desc;
+    var cdTxt = sk.cd > 0 ? ('冷却 ' + sk.cd + ' 轮（明暗都计）') : '没有冷却';
+    var stateTxt = sk.used ? '　·　已经用掉了' : (sk.wait > 0 ? '　·　现在还差 ' + sk.wait + ' 轮' : '　·　现在可以发动');
+    var qiTxt = sk.qi > 0 ? ('　·　要 ' + sk.qi + ' 气') : '';
+    $('#tipCd').textContent = cdTxt + qiTxt + stateTxt + (info.hint ? '\n' + info.hint : '');
+    $('#tip').className = 'on';
+  }
+  function closeTip() { S.tipOpen = false; $('#tip').className = ''; }
+  $('#tipClose').onclick = closeTip;
+
+  // 规则浮层：只讲主循环 / 气 / 币 / 地 / 杀 / 劫 / 劫灰 / 胜负。
+  // 技能与商店道具一律写「请自由探索」—— 这是用户定的，别往里加说明。
+  function openRules() { S.rules = true; $('#rules').className = 'on'; }
+  function closeRules() { S.rules = false; $('#rules').className = ''; }
+  $('#rulesBtn').onclick = openRules;
+  $('#rulesClose').onclick = closeRules;
+
+  // 认输：角落里的暗红小按钮。点了先问一句 —— 这是一局的事，别手滑。
+  $('#resignBtn').onclick = function () {
+    if (!S.view || !S.view.both || S.view.over) return;
+    if (!window.confirm('认输？这一局就直接判你输了，不行再开一局。')) return;
+    act({ type: 'resign' });
+  };
+
+  function startSkill(k) {
+    var sk = skillByK(k); if (!sk) return;
+    if (!sk.ready) {
+      S.note = sk.used ? '这个技能已经用掉了'
+        : (sk.wait > 0 ? ('还要等 ' + sk.wait + ' 轮')
+          : (!sk.enough ? ('气不够，要 ' + sk.qi + ' 点')
+            : '现在不是发动它的时候'));   // 气够了但时机不对 —— 别写成缺气
+      render(); return;
+    }
+    // 拂尘：盘上没灰就没得挪
+    if (sk.id === 'fuchen' && !(S.view.ashCount > 0)) { S.note = '盘上还没有劫灰，没得挪。'; render(); return; }
+    // 吐纳：不需要选格子，直接发
+    if (sk.id === 'tuna') { act({ type: 'skill', k: k }); return; }
+    // 平 / 垂 / 荒：直接挂上，等这一手杀成。荒 还要先选吃掉哪一支（用户要自己定）。
+    if (sk.id === 'huang') {
+      var usedIds = (S.view.myUsedOnce || []);
+      var canP = usedIds.indexOf('ping') < 0;
+      var canC = usedIds.indexOf('chui') < 0;
+      if (!canP && !canC) { S.note = '平和垂都用光了，荒也没了。'; render(); return; }
+      S.eatPick = { k: k, canP: canP, canC: canC };
+      render();
+      return;
+    }
+    if (sk.id === 'ping' || sk.id === 'chui') {
+      act({ type: 'skill', k: k });
+      return;
+    }
+    // 拂尘（灰→空位）/ 覆（点一个空格）
+    S.skillPick = true; S.skillK = k; S.skillFrom = null;
+    S.note = '';
+    render();
+  }
+  function cancelSkill() { S.skillPick = false; S.skillFrom = null; S.skillK = 0; S.note = ''; render(); }
+
+  // ── 特效排期：所有特效共用一个时间轴 ─────────────────────
+  // 以前「劫」的墨团和「夺」的大字会同时糊在屏幕上（暗轮撞格结算完
+  // 紧接着就进竞拍闪夺）。现在统一排队，一个播完再播下一个。
+  var fxBusy = 0;
+  function fxSlot(dur, fn) {
+    var now = Date.now();
+    var start = Math.max(now, fxBusy);
+    fxBusy = start + dur;
+    if (start <= now) fn();
+    else setTimeout(fn, start - now);
+  }
+
   // ── 成灰特效：杀（红，主动，有冲击）／劫（蓝灰，无妄之灾）──
   function playFx(list) {
     var layer = $('#fx'), board = $('#board');
-    if (!layer) return;
-    var shake = false;
-    list.forEach(function (e, k) {
-      var kind = e.kind === 'jie' ? 'jie' : 'kill';
-      if (kind === 'kill') shake = true;
-      var col = e.cell % N, row = (e.cell / N) | 0;
-      var d = document.createElement('div');
-      d.className = 'fx ' + kind;
-      d.style.left = ((col + .5) * 100 / N) + '%';
-      d.style.top = ((row + .5) * 100 / N) + '%';
-      d.style.animationDelay = (k * 90) + 'ms';
-      var ink = document.createElement('div'); ink.className = 'ink';
-      var w = document.createElement('div'); w.className = 'word';
-      w.textContent = kind === 'jie' ? '劫' : '杀';
-      d.appendChild(ink); d.appendChild(w);
-      layer.appendChild(d);
-      setTimeout(function () { d.remove(); }, 1500 + k * 90);
+    if (!layer || !list.length) return;
+    fxSlot(880 + list.length * 90, function () {
+      var shake = false;
+      list.forEach(function (e, k) {
+        var kind = e.kind === 'jie' ? 'jie' : 'kill';
+        if (kind === 'kill') shake = true;
+        var col = e.cell % N, row = (e.cell / N) | 0;
+        var d = document.createElement('div');
+        d.className = 'fx ' + kind;
+        d.style.left = ((col + .5) * 100 / N) + '%';
+        d.style.top = ((row + .5) * 100 / N) + '%';
+        d.style.animationDelay = (k * 90) + 'ms';
+        var ink = document.createElement('div'); ink.className = 'ink';
+        var w = document.createElement('div'); w.className = 'word';
+        w.textContent = kind === 'jie' ? '劫' : '杀';
+        d.appendChild(ink); d.appendChild(w);
+        layer.appendChild(d);
+        setTimeout(function () { d.remove(); }, 1500 + k * 90);
+      });
+      if (shake) {
+        board.classList.remove('hit');
+        void board.offsetWidth;
+        board.classList.add('hit');
+        setTimeout(function () { board.classList.remove('hit'); }, 400);
+      }
     });
-    if (shake) {
-      board.classList.remove('hit');
-      void board.offsetWidth;
-      board.classList.add('hit');
-      setTimeout(function () { board.classList.remove('hit'); }, 400);
+  }
+
+  // 通用的「流水去重」：进桌时不补放旧特效（刷新不该看到历史动画），
+  // 但**必须把游标推到当前位置** —— 原来的写法在流水为空时直接 return，
+  // 游标留在 -1，于是本局第一个特效（第一次劫！）被当成旧的吞掉。
+  // replayIfFew：开局那两条（对弈开始 + 夺）允许补播一次，让开局不哑；
+  // 中途刷新进来则直接跳到队尾，不会一次补播几十个。
+  function seenStore(key) { return 'jh_' + (S.room || '') + '_' + key; }
+  function seenRead(key) {
+    try { var x = sessionStorage.getItem(seenStore(key)); return x == null ? null : (+x); }
+    catch (e) { return null; }
+  }
+  function seenWrite(key, v) {
+    try { sessionStorage.setItem(seenStore(key), String(v)); } catch (e) { /* 无痕模式，忽略 */ }
+  }
+
+  function pickFresh(list, seenKey, initKey, render, replayIfFew) {
+    list = list || [];
+    var last = list.length ? list[list.length - 1].id : 0;
+    if (!S[initKey]) {
+      S[initKey] = true;
+      var stored = seenRead(seenKey);
+      if (stored != null) {
+        // 这一局见过：刷新页面直接跳到最新，不重播已经看过的特效
+        S[seenKey] = last;
+      } else if (replayIfFew && last > 0 && last <= replayIfFew) {
+        // 头一次进这一局，而且流水还短（就是开局那两条）：从头补播「对弈开始 → 夺」
+        S[seenKey] = 0;
+      } else {
+        S[seenKey] = last;
+      }
+      seenWrite(seenKey, S[seenKey]);
     }
+    // 换局：序号从 1 重数。这时候也要把开局那两条补播一遍（再来一局同样要看到「对弈开始」）
+    if (last < S[seenKey]) {
+      S[seenKey] = (replayIfFew && last > 0 && last <= replayIfFew) ? 0 : last;
+      seenWrite(seenKey, S[seenKey]);
+      if (S[seenKey] === 0 && last > 0) {
+        list.filter(function (e) { return e.id > 0; }).forEach(render);
+        S[seenKey] = last; seenWrite(seenKey, last);
+      }
+      return;
+    }
+    if (last <= S[seenKey]) return;
+    var fresh = list.filter(function (e) { return e.id > S[seenKey]; });
+    S[seenKey] = last;
+    seenWrite(seenKey, last);
+    fresh.forEach(render);
   }
 
   function processFx(v) {
-    if (!v || !v.fx || !v.fx.length) return;
-    var last = v.fx[v.fx.length - 1].id;
-    if (S.fxSeen < 0) { S.fxSeen = last; return; }   // 刚进桌/刷新，不补放旧特效
-    if (last < S.fxSeen) { S.fxSeen = last; return; } // 换了一局（序号从 0 重数），不补放
-    if (last === S.fxSeen) return;
-    var fresh = v.fx.filter(function (e) { return e.id > S.fxSeen; });
-    S.fxSeen = last;
-    playFx(fresh);
+    pickFresh(v && v.fx, 'fxSeen', 'fxInit', function (e) { playFx([e]); }, 0);
+  }
+  function processMode(v) {
+    // 开局只有两条（start / duo）时补播；之后一律只播新的
+    pickFresh(v && v.modeFx, 'modeSeen', 'modeInit', function (e) { playPhase(e.kind); }, 2);
+  }
+  function processIncome(v) {
+    pickFresh(v && v.incomeFx, 'incomeSeen', 'incomeInit', function (e) { playCoins(e); }, 0);
+  }
+  function processMove(v) {
+    pickFresh(v && v.moveFx, 'moveSeen', 'moveInit', function (e) { playMove(e); }, 0);
+  }
+  function processZone(v) {
+    pickFresh(v && v.zoneFx, 'zoneSeen', 'zoneInit', function (e) { playZone(e); }, 0);
+  }
+  function processBreak(v) {
+    pickFresh(v && v.fuFx, 'breakSeen', 'breakInit', function (e) { playBreak(e); }, 0);
+  }
+
+  // 禁入点金框：平（横三格）／垂（竖三格）／荒（3×3 九格）都是「从格心向两侧张开」的一个框。
+  // 用 SVG 画，因为横三格与九宫格的长宽比差三倍，CSS 拼不出一个完整的框。
+  var ARM_TXT = { ping: '平（横三格）', chui: '垂（竖三格）', huang: '荒（三乘三）' };
+  var ZONE_TXT = { ping: '横三格封了', chui: '竖三格封了', huang: '九格全封了' };
+
+  function playZone(e) {
+    if (e == null || !e.cells || !e.cells.length) return;
+    fxSlot(1150, function () {
+      var svg = $('#zsvg'); if (!svg) return;
+      var ns = 'http://www.w3.org/2000/svg';
+      // 圈出这些格子的外接矩形。
+      // 关键：格心坐标是 c+0.5，而一格在 0..9 的坐标系里占 [c, c+1]，
+      // 所以框要从 minC 画到 maxC+1 —— 之前少加了 1，三格看着只有两格宽。
+      var minC = 8, maxC = 0, minR = 8, maxR = 0;
+      e.cells.forEach(function (i) {
+        var c = i % N, r = (i / N) | 0;
+        if (c < minC) minC = c; if (c > maxC) maxC = c;
+        if (r < minR) minR = r; if (r > maxR) maxR = r;
+      });
+      var pad = 0.04;
+      var x = minC + pad, y = minR + pad;
+      var w = (maxC - minC) + 1 - pad * 2, h = (maxR - minR) + 1 - pad * 2;
+      var fill = document.createElementNS(ns, 'rect');
+      fill.setAttribute('class', 'zonefill');
+      fill.setAttribute('x', x); fill.setAttribute('y', y);
+      fill.setAttribute('width', w); fill.setAttribute('height', h);
+      fill.setAttribute('rx', 0.06);
+      var box = document.createElementNS(ns, 'rect');
+      box.setAttribute('class', 'zonebox');
+      box.setAttribute('x', x); box.setAttribute('y', y);
+      box.setAttribute('width', w); box.setAttribute('height', h);
+      box.setAttribute('rx', 0.06);
+      svg.appendChild(fill); svg.appendChild(box);
+      setTimeout(function () { fill.remove(); box.remove(); }, 2600);
+    });
+  }
+
+  // 覆猜中：那颗子碎成十几块，往四周飞散，然后格子上什么都没有了。
+  function playBreak(e) {
+    if (e == null || e.cell == null) return;
+    fxSlot(900, function () {
+      var layer = $('#fx'); if (!layer) return;
+      var d = document.createElement('div');
+      d.className = 'fxbreak';
+      var col = e.cell % N, row = (e.cell / N) | 0;
+      d.style.left = ((col + .5) * 100 / N) + '%';
+      d.style.top = ((row + .5) * 100 / N) + '%';
+      // 碎的是被碎掉的那颗子。它可能是黑的也可能是白的 —— 引擎把格子清空之前
+      // 已经把颜色记在 e.color 里（1=黑 2=白），照它画。
+      var white = (e.color === 2);
+      for (var k = 0; k < 15; k++) {
+        var s = document.createElement('i');
+        if (white) s.className = 'w';
+        // 碎片大小不一，越小越散 —— 像真的碎了，而不是一圈等大的渣
+        var sz = 17 + Math.random() * 20;
+        s.style.width = sz.toFixed(1) + '%';
+        s.style.height = (sz * (0.62 + Math.random() * 0.55)).toFixed(1) + '%';
+        var ang = (k / 15) * Math.PI * 2 + (Math.random() - 0.5) * 0.7;
+        var dist = 40 + Math.random() * 62;
+        s.style.setProperty('--sx', (Math.cos(ang) * dist).toFixed(1) + '%');
+        s.style.setProperty('--sy', (Math.sin(ang) * dist).toFixed(1) + '%');
+        s.style.setProperty('--rot', ((Math.random() * 900 - 450) | 0) + 'deg');
+        s.style.animationDelay = (Math.random() * 90).toFixed(0) + 'ms';
+        d.appendChild(s);
+      }
+      layer.appendChild(d);
+      setTimeout(function () { d.remove(); }, 1200);
+    });
+  }
+
+  // 拂尘：一团灰从一个交叉点**平移**到另一个交叉点（用户要求：不要消失再出现，要平移过去）。
+  // 起点那一刻墨团正好盖住原来那团灰（同一形状同一颜色），所以看起来就是它自己滑走了。
+  function playMove(e) {
+    if (e == null || e.from == null || e.to == null) return;
+    var MS = 780;
+    fxSlot(MS + 420, function () {
+      var layer = $('#fx'); if (!layer) return;
+      var d = document.createElement('div');
+      d.className = 'fxmove';
+      var fc = e.from % N, fr = (e.from / N) | 0;
+      var tc = e.to % N, tr = (e.to / N) | 0;
+      d.style.left = ((fc + .5) * 100 / N) + '%';
+      d.style.top = ((fr + .5) * 100 / N) + '%';
+      var blob = document.createElement('div');
+      blob.className = 'blob';
+      // .blob 宽 = 一格，所以格差直接就是百分比
+      blob.style.setProperty('--dx', ((tc - fc) * 100) + '%');
+      blob.style.setProperty('--dy', ((tr - fr) * 100) + '%');
+      d.appendChild(blob);
+      layer.appendChild(d);
+      setTimeout(function () {
+        d.remove();
+        var land = document.createElement('div');
+        land.className = 'fxland';
+        land.style.left = ((tc + .5) * 100 / N) + '%';
+        land.style.top = ((tr + .5) * 100 / N) + '%';
+        layer.appendChild(land);
+        setTimeout(function () { land.remove(); }, 660);
+      }, MS);
+    });
+  }
+
+  // 阶段切换闪大字：对弈开始 / 夺（竞拍）/ 明 / 暗 / 大捷 / 败北 / 和局 —— 排队播，不重叠
+  var PHASE_TXT = {
+    start: '对弈开始', duo: '夺', ming: '明', an: '暗',
+    zhong: '大捷',    // 终局：赢了
+    he: '和局'        // 终局：势均力敌
+  };
+  function playPhase(kind) {
+    var host = $('#phasefx'); if (!host) return;
+    var v = S.view;
+    var txt = PHASE_TXT[kind] || '';
+    if (!txt) return;
+    // 终局那条要看是谁赢了才知道叫「大捷」还是「败北」
+    if (kind === 'zhong' && v && v.winner != null && v.winner !== -1 && v.winner !== v.seat) txt = '败北';
+    fxSlot(kind === 'start' ? 900 : 780, function () {
+      var d = document.createElement('div');
+      d.className = 'ph ' + (kind || 'an');
+      d.textContent = txt;
+      host.appendChild(d);
+      setTimeout(function () { d.remove(); }, 1150);
+    });
+  }
+
+  // 明轮结算：金币在**自己**最大块上同时旋一下
+  // （只放自己的 —— 两家的块一起闪会看不清哪块是自己的钱；
+  //   并且排队播：先看钱，再看「暗」的大字，不糊在一起）
+  function playCoins(e) {
+    var v = S.view; if (!v) return;
+    var mine = (e.cells && e.cells[v.seat]) ? e.cells[v.seat] : [];
+    var got = (e.coins && e.coins[v.seat]) || 0;
+    if (!mine.length || !got) return;      // 自己这轮没赚就不放，免得空闪
+    fxSlot(1150, function () {
+      var layer = $('#fx'); if (!layer) return;
+      mine.forEach(function (i) {
+        var col = i % N, row = (i / N) | 0;
+        var d = document.createElement('div');
+        d.className = 'fxcoin';
+        d.style.left = ((col + .5) * 100 / N) + '%';
+        d.style.top = ((row + .5) * 100 / N) + '%';
+        layer.appendChild(d);             // 同时出现，不逐个
+        setTimeout(function () { d.remove(); }, 1250);
+      });
+    });
   }
 
   function renderShop() {
@@ -677,21 +1521,31 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       var owned = mine.filter(function (x) { return x === it.id; }).length;
       var row = document.createElement('div');
       row.className = 'item';
+      var left = (it.left != null && it.left >= 0) ? ('剩 ' + it.left + ' 个') : '';
       row.innerHTML = '<div class="lf"><div class="nm">' + it.name + '</div>' +
         '<div class="ds">' + it.desc + '</div></div>' +
-        '<div class="ct">' + it.price + ' 币<br>' + (owned ? '有 ' + owned + ' 件' : '') + '</div>';
+        '<div class="ct">' + it.price + ' 币<br>' + (owned ? '有 ' + owned + ' 件' : '') +
+        (left ? '<br>' + left : '') + '</div>';
+      var soldOut = (it.left === 0);
       var buy = document.createElement('button');
-      buy.textContent = '买';
-      buy.disabled = (v.coins[me] || 0) < it.price || v.over;
+      buy.textContent = soldOut ? '售罄' : '买';
+      buy.disabled = soldOut || (v.coins[me] || 0) < it.price || v.over;
       buy.onclick = function () { act({ type: 'buy', id: it.id }); };
       row.appendChild(buy);
-      if (owned > 0 && v.need === 'hidden' && it.when === 'hidden') {
+      if (owned > 0) {
+        // 盾：只有暗轮、且自己还没落子的时候能用（引擎也是这么校验的）。
+        // 丹 / 经：随时能吃了。
+        var canUse = (it.when === 'hidden') ? ((v.need === 'hidden') && !v.over) : !v.over;
         var use = document.createElement('button');
         use.className = 'ghost'; use.textContent = '用';
+        use.disabled = !canUse;
         use.onclick = function () {
+          if (!canUse) return;
           if (it.id === 'shield') {
-            // 盾要点自己的一颗子：关掉商店，进入「点格子挑盾位」模式
-            S.shop = false; S.shieldPick = true; S.note = '点一颗自己的子，把盾罩在它上面（暗轮落子前才能用）';
+            // 盾要点自己的一颗子：关掉商店、进入「点格子挑盾位」模式
+            S.shop = false;
+            S.shieldPick = true;
+            S.note = '点一颗自己的子，把盾罩在它上面（暗轮落子前才能用；还有盾就接着点）';
             render();
             return;
           }
