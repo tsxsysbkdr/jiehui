@@ -140,6 +140,14 @@ function view(r, seat) {
     rematch: r.rematch.slice()
   };
 
+  // 暗轮：自己已经悄悄落下的那子，自己要看得到（对手看不到 —— 这正是 view 按人分的原因）。
+  // 结算前它还没写进 cells，所以这里单独补一份给自己。
+  if (g.phase === 'hidden' && g.pending.hidden[seat] != null) {
+    const own = g.pending.hidden[seat];
+    v.cells[own] = seat + 1;
+    v.myHidden = own;
+  }
+
   // 杀 = 落子覆盖：把「能覆盖的敌方老子」的格子告诉前端，让它们可点
   if (need === 'place' || need === 'second') {
     v.killTargets = g.killTargetsFor(seat);

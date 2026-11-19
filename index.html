@@ -272,6 +272,12 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     }).then(function (r) {
+      // 容器休眠/重启时 SnapDeploy 会返回一张 HTML 唤醒页，不是 JSON。
+      // 直接 r.json() 会炸出「Unexpected token '<'」，所以先看类型。
+      var ct = r.headers.get('content-type') || '';
+      if (ct.indexOf('json') < 0) {
+        throw new Error('服务器正在唤醒，等十几秒再点一次');
+      }
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
     });
   }
@@ -518,7 +524,8 @@ button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
     } else {
       msg = (v.phase === 'auction' && v.myBid != null) ? '已出 <em>' + v.myBid + '</em> 币，等对手…'
         : v.phase === 'tie-raise' && v.tieMine !== null ? '已选，等对手…'
-          : '等对手行动…';
+          : (v.phase === 'hidden' && v.myHidden != null) ? '你的子已经落下（<em>暗</em>），对手看不到。等对手落子…'
+            : '等对手行动…';
     }
     if (S.note) msg += '<br><span style="color:#b4483a">' + S.note + '</span>';
     $('#msg').innerHTML = msg;
