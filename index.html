@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#e6ddc9">
+<title>劫灰</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  background:radial-gradient(120% 80% at 50% -10%,#faf6ec 0%,#efe7d5 45%,#e2d8c2 100%);
+  color:#2b2620;display:flex;flex-direction:column;height:100dvh;overflow:hidden;
+  user-select:none;-webkit-user-select:none;
+}
+
+/* ── 顶栏 ───────────────────────────── */
+#top{padding:10px 14px 4px;flex:none}
+#title{display:flex;align-items:baseline;gap:8px}
+#title b{font-size:19px;letter-spacing:5px;font-weight:600}
+#title span{font-size:11px;color:#8a7f6b;letter-spacing:1px}
+#meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:12px;color:#6b6252}
+#ashbar{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+#ashbar i{width:9px;height:9px;border-radius:2px;background:#cfc6b2;display:block;transition:background .3s}
+#ashbar i.on{background:#8f3d34}
+
+/* ── 双方信息 ────────────────────────── */
+#sides{display:flex;gap:8px;padding:8px 14px 6px;flex:none}
+.side{flex:1;background:rgba(255,255,255,.42);border:1px solid rgba(120,105,80,.16);
+  border-radius:10px;padding:7px 10px;display:flex;align-items:center;gap:8px;font-size:12px}
+.side.me{background:rgba(120,150,120,.13);border-color:rgba(90,120,90,.3)}
+.side .dot{width:15px;height:15px;border-radius:50%;flex:none}
+.dot.b{background:radial-gradient(circle at 36% 30%,#6d6a66,#191817 62%,#060606 100%);
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.35)}
+.dot.w{background:radial-gradient(circle at 36% 30%,#fffefb,#f0eadc 55%,#cdc4af 100%);
+  box-shadow:inset 0 0 0 1px rgba(110,98,76,.35),0 1px 2px rgba(0,0,0,.16)}
+.side .nm{flex:1;color:#5a5245}
+.side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45}
+.side .cn small{font-weight:400;opacity:.65}
+
+/* ── 棋盘：棋子落在交叉点上 ───────────── */
+#wrap{flex:1;display:grid;place-items:center;min-height:0;padding:2px 12px}
+#board{
+  position:relative;
+  width:min(92vw,352px,50dvh);aspect-ratio:1;
+  background-color:#e8ddc3;
+  background-image:linear-gradient(160deg,rgba(255,255,255,.35),rgba(160,140,105,.1));
+  border-radius:3px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.8) inset,
+    0 0 0 1px rgba(122,101,68,.5),
+    0 0 0 6px #efe6d1,
+    0 0 0 7px rgba(122,101,68,.42),
+    0 10px 28px rgba(78,60,36,.22);
+}
+#board svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#board svg line{stroke:rgba(104,84,54,.62);stroke-width:.022;stroke-linecap:square}
+#board svg line.edge{stroke:rgba(104,84,54,.8);stroke-width:.03}
+
+#grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr)}
+.cell{position:relative;cursor:default}
+.cell.tap{cursor:pointer}
+.cell.tap::after{content:'';position:absolute;inset:22%;border-radius:50%;
+  background:rgba(104,86,56,.16);opacity:0;transition:opacity .15s}
+.cell.tap:active::after{opacity:1}
+
+/* 棋子：黑子 / 白子，圆点在交叉点正中 */
+.cell.b::after,.cell.w::after{content:'';position:absolute;inset:9%;border-radius:50%}
+.cell.b::after{
+  background:radial-gradient(circle at 34% 26%,#7c7872 0%,#3a3835 26%,#161514 62%,#050505 100%);
+  box-shadow:inset 0 -1px 3px rgba(0,0,0,.6),inset 0 1px 2px rgba(255,255,255,.22),0 2px 5px rgba(0,0,0,.4);
+}
+.cell.w::after{
+  background:radial-gradient(circle at 34% 26%,#fffefc 0%,#f4efe2 38%,#ded5c0 78%,#c2b8a1 100%);
+  box-shadow:inset 0 0 0 1px rgba(120,106,82,.32),inset 0 -1px 3px rgba(120,106,82,.28),0 2px 5px rgba(0,0,0,.22);
+}
+
+/* 劫灰：暗红墨渍（和黑子分得开） */
+.cell.a::before{
+  content:'';position:absolute;inset:2%;border-radius:46% 54% 44% 56%/56% 44% 58% 42%;
+  background:radial-gradient(circle at 42% 38%,
+    rgba(126,42,36,.72) 0%,rgba(126,42,36,.5) 38%,rgba(126,42,36,.16) 64%,rgba(126,42,36,0) 76%);
+  filter:blur(.7px);
+}
+.cell.a::after{
+  content:'';position:absolute;inset:8%;border-radius:50%;
+  background:
+    radial-gradient(circle at 26% 68%,rgba(126,42,36,.62) 0 11%,transparent 12%),
+    radial-gradient(circle at 72% 26%,rgba(126,42,36,.5) 0 8%,transparent 9%),
+    radial-gradient(circle at 82% 76%,rgba(126,42,36,.4) 0 6%,transparent 7%),
+    radial-gradient(circle at 16% 24%,rgba(126,42,36,.34) 0 5%,transparent 6%);
+  filter:blur(.8px);
+}
+
+.cell.anchor::after{content:'';position:absolute;inset:39%;border-radius:50%;
+  background:rgba(64,110,160,.6);pointer-events:none}
+.cell.jie::before{content:'';position:absolute;inset:2%;border:2px solid rgba(150,36,28,.92);
+  border-radius:50%;pointer-events:none;animation:pl 1.4s infinite}
+@keyframes pl{0%,100%{opacity:.95}50%{opacity:.28}}
+.cell.sel::before{content:'';position:absolute;inset:16%;border:2px dashed rgba(64,110,160,.9);border-radius:50%}
+
+/* ── 操作区 ─────────────────────────── */
+#bar{flex:none;padding:6px 14px calc(12px + env(safe-area-inset-bottom));min-height:120px}
+#msg{font-size:13px;color:#5f5647;text-align:center;line-height:1.5;min-height:20px;margin-bottom:8px}
+#msg em{font-style:normal;color:#9a6b3a;font-weight:600}
+#msg s{color:#8a8070;text-decoration:none}
+#btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{
+  font:inherit;font-size:14px;border:0;border-radius:11px;padding:11px 16px;
+  background:#3f3a32;color:#f7f2e6;cursor:pointer;transition:transform .08s,opacity .2s;
+  min-width:56px;
+}
+button:active{transform:scale(.96)}
+button:disabled{opacity:.38;cursor:default}
+button.ghost{background:rgba(255,255,255,.6);color:#3f3a32;box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
+button.jiebtn{background:#8c3b30}
+button.shopbtn{background:rgba(255,255,255,.5);color:#5a5040;box-shadow:inset 0 0 0 1px rgba(120,105,80,.35);
+  font-size:13px;padding:10px 13px;min-width:0}
+button.wide{padding:11px 24px}
+#log{font-size:11px;color:#8a8070;text-align:center;margin-top:6px;height:15px;overflow:hidden}
+#room{font-size:11px;color:#8a7f6b;text-align:center;margin-top:4px}
+#room code{background:rgba(255,255,255,.6);padding:1px 5px;border-radius:4px;letter-spacing:1.5px;color:#5a5245}
+
+/* ── 商店浮层 ───────────────────────── */
+#shop{position:fixed;inset:0;background:rgba(40,34,26,.42);display:none;place-items:center;z-index:50;padding:20px}
+#shop.on{display:grid}
+#sheet{background:#f7f2e6;border-radius:14px;padding:16px 16px 14px;width:min(94vw,330px);
+  box-shadow:0 18px 44px rgba(40,30,18,.34);max-height:80dvh;overflow:auto}
+#sheet h3{margin:0 0 4px;font-size:15px;letter-spacing:1px}
+#sheet .sub{font-size:11px;color:#8a8070;margin-bottom:12px}
+.item{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(120,105,80,.16)}
+.item .nm{font-size:13px;font-weight:600}
+.item .ds{font-size:11px;color:#8a8070;line-height:1.45;margin-top:2px}
+.item .lf{flex:1;min-width:0}
+.item .ct{font-size:11px;color:#8a7f6b;white-space:nowrap;text-align:right}
+.item button{font-size:12px;padding:8px 12px;min-width:0;border-radius:9px}
+#sheet .close{display:block;width:100%;margin-top:12px;background:rgba(255,255,255,.6);color:#3f3a32;
+  box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div id="title"><b>劫灰</b><span id="roundTxt"></span></div>
+  <div id="meta">
+    <span>劫灰</span>
+    <div id="ashbar"></div>
+    <span id="ashTxt"></span>
+  </div>
+</div>
+
+<div id="sides">
+  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="cn">0<small>币</small></div></div>
+  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">对手</div><div class="cn">0<small>币</small></div></div>
+</div>
+
+<div id="wrap"><div id="board">
+  <svg viewBox="0 0 9 9" preserveAspectRatio="none" id="lines"></svg>
+  <div id="grid"></div>
+</div></div>
+
+<div id="bar">
+  <div id="msg"></div>
+  <div id="btns"></div>
+  <div id="log"></div>
+  <div id="room"></div>
+</div>
+
+<div id="shop"><div id="sheet">
+  <h3>商店</h3>
+  <div class="sub">随时可买，买到的道具在手里囤着。</div>
+  <div id="shopList"></div>
+  <button class="close" id="shopClose">关上</button>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var EMPTY = 0, BLACK = 1, WHITE = 2, ASH = 3;
+  var N = 9;
+
+  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false };
+
+  function $(s) { return document.querySelector(s); }
+  function nameOf(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].name; return id; }
+
+  function token() {
+    var t = sessionStorage.getItem('jh_tk');
+    if (!t) { t = 'k' + Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('jh_tk', t); }
+    return t;
+  }
+  S.token = token();
+
+  function post(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    });
+  }
+
+  function join(room, isRetry) {
+    return post('/api/join', { token: S.token, room: room }).then(function (j) {
+      S.room = j.room; S.seat = j.seat; S.view = j.view;
+      sessionStorage.setItem('jh_room', j.room);
+      try { history.replaceState(null, '', '#' + j.room); } catch (e) { }
+      render();
+      poll();
+    }).catch(function (e) {
+      if (!isRetry && !room) return join('', true);
+      if (!isRetry && /房间不存在/.test(e.message)) {
+        try { history.replaceState(null, '', location.pathname); } catch (x) { }
+        return join('', true);
+      }
+      $('#msg').innerHTML = '进不去：' + e.message + '<br><br>可能是这局已经过期了。';
+      $('#btns').innerHTML = '';
+      var b = document.createElement('button'); b.textContent = '新开一桌';
+      b.onclick = function () { join(''); };
+      $('#btns').appendChild(b);
+    });
+  }
+
+  var polling = false;
+  function poll() {
+    if (polling) return;
+    polling = true;
+    var q = '/api/state?room=' + S.room + '&token=' + encodeURIComponent(S.token) + '&v=' + (S.view ? S.view.v : 0);
+    fetch(q).then(function (r) {
+      return r.json().then(function (j) {
+        polling = false;
+        if (!r.ok) { setTimeout(poll, 1200); return; }
+        S.view = j; render(); poll();
+      });
+    }).catch(function () { polling = false; setTimeout(poll, 1200); });
+  }
+
+  function act(action) {
+    if (S.busy) return;
+    S.busy = true;
+    var keep = S.view;
+    post('/api/act', { room: S.room, token: S.token, action: action }).then(function (j) {
+      S.view = j.view; S.busy = false; S.note = ''; S.sel = null; render();
+    }).catch(function (e) {
+      S.busy = false; S.view = keep; S.note = e.message; render();
+    });
+  }
+
+  // ── 棋盘：9 条竖线 9 条横线，交叉点就是落点 ────────────
+  (function drawLines() {
+    var svg = $('#lines'), NS = 'http://www.w3.org/2000/svg';
+    var lo = 0.5, hi = N - 0.5;
+    for (var i = 0; i < N; i++) {
+      var c = i + 0.5;
+      var v = document.createElementNS(NS, 'line');
+      v.setAttribute('x1', c); v.setAttribute('y1', lo);
+      v.setAttribute('x2', c); v.setAttribute('y2', hi);
+      if (i === 0 || i === N - 1) v.setAttribute('class', 'edge');
+      svg.appendChild(v);
+      var h = document.createElementNS(NS, 'line');
+      h.setAttribute('x1', lo); h.setAttribute('y1', c);
+      h.setAttribute('x2', hi); h.setAttribute('y2', c);
+      if (i === 0 || i === N - 1) h.setAttribute('class', 'edge');
+      svg.appendChild(h);
+    }
+  })();
+
+  var gridEl = $('#grid'), cells = [];
+  for (var i = 0; i < N * N; i++) {
+    var d = document.createElement('div');
+    d.className = 'cell'; d.dataset.i = i;
+    d.addEventListener('click', onCell);
+    gridEl.appendChild(d); cells.push(d);
+  }
+
+  function onCell() {
+    var v = S.view; if (!v || v.over || !v.both) return;
+    var i = +this.dataset.i;
+    if (v.need === 'place' || v.need === 'second') {
+      var isJie = (v.jieTargets || []).indexOf(i) >= 0;
+      if (isJie) { act({ type: 'place', cell: i }); return; }
+      if (v.cells[i] !== EMPTY) return;
+      if (v.need === 'second') {
+        var an = v.anchors || [];
+        if (an.length > 0 && an.indexOf(i) < 0) {
+          S.note = '这一手得贴着落；也可以去盖掉对方无保护的子';
+          render(); return;
+        }
+      }
+      act({ type: 'place', cell: i });
+    } else if (v.need === 'hidden') {
+      if (v.cells[i] !== EMPTY) return;
+      S.sel = i; render();
+    }
+  }
+
+  function render() {
+    var v = S.view; if (!v) return;
+    var me = v.seat, op = 1 - v.seat;
+
+    // ── 选人界面（只有一个无锋，但流程留着）
+    if (v.picking) {
+      for (var q = 0; q < N * N; q++) cells[q].className = 'cell';
+      var m = v.myPick ? '你选了 <em>' + nameOf(v.champs, v.myPick) + '</em>。' : '选一个弈士，双方选完即开局。';
+      if (!v.both) m = '把地址发给朋友等他进桌 —— 或者再开一个浏览器标签页自己试。<br>两人到齐后选弈士开局。';
+      if (v.myPick && !v.oppPicked) m += '<br>等对手选…';
+      $('#msg').innerHTML = m;
+      $('#roundTxt').textContent = '';
+
+      var bx = $('#btns'); bx.innerHTML = '';
+      if (v.both && !v.myPick) {
+        v.champs.forEach(function (c) {
+          var el = document.createElement('button');
+          el.textContent = c.name + ' · ' + c.tag;
+          el.className = 'ghost';
+          el.onclick = function () { act({ type: 'champ', id: c.id }); };
+          bx.appendChild(el);
+        });
+      }
+      var desc = document.createElement('div');
+      desc.style.cssText = 'font-size:11px;color:#8a8070;text-align:center;line-height:1.7;margin-top:8px';
+      if (v.both && !v.myPick) {
+        desc.innerHTML = v.champs.map(function (c) {
+          return '<b>' + c.name + '</b>　' + c.desc + '（起手 ' + c.coins + ' 币）';
+        }).join('<br>');
+      }
+      if (v.both) {
+        var cpBtn = document.createElement('button');
+        cpBtn.className = 'ghost'; cpBtn.textContent = '复制邀请链接';
+        cpBtn.onclick = copyLink;
+        bx.appendChild(cpBtn);
+      }
+      $('#log').innerHTML = '';
+      $('#log').style.height = 'auto';
+      $('#log').appendChild(desc);
+      $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
+      S.shop = false; renderShop();
+      return;
+    }
+    $('#log').style.height = '15px';
+
+    // ── 顶栏
+    var modeTxt = (v.phase === 'auction' || v.phase === 'tie-raise' || v.phase === 'raise' || v.phase === 'order')
+      ? '竞拍' : v.roundMode === 'open' ? '明轮' : v.roundMode === 'hidden' ? '暗轮' : '';
+    $('#roundTxt').textContent = v.round + '/' + v.totalRounds + ' 轮 · ' + modeTxt;
+    var ab = $('#ashbar'); ab.innerHTML = '';
+    var pips = Math.max(14, v.ashCount);
+    for (var k = 0; k < pips; k++) {
+      var e = document.createElement('i');
+      if (k < v.ashCount) e.className = 'on';
+      ab.appendChild(e);
+    }
+    $('#ashTxt').textContent = v.ashCount;
+
+    // ── 双方
+    $('#sideMe .dot').className = 'dot ' + (me === 0 ? 'b' : 'w');
+    $('#sideMe .nm').textContent = '你';
+    $('#sideMe .cn').innerHTML = (v.coins[me] || 0) + '<small>币</small>';
+    $('#sideOpp .dot').className = 'dot ' + (op === 0 ? 'b' : 'w');
+    $('#sideOpp .nm').textContent = '对手';
+    $('#sideOpp .cn').innerHTML = (v.coins[op] || 0) + '<small>币</small>';
+
+    // ── 棋盘
+    var anchors = v.need === 'second' ? (v.anchors || []) : [];
+    var jt = (v.need === 'place' || v.need === 'second') ? (v.jieTargets || []) : [];
+    for (var i2 = 0; i2 < N * N; i2++) {
+      var c = v.cells[i2], cls = 'cell';
+      if (c === BLACK) cls += ' b'; else if (c === WHITE) cls += ' w'; else if (c === ASH) cls += ' a';
+      if (anchors.indexOf(i2) >= 0) cls += ' anchor';
+      if (jt.indexOf(i2) >= 0) cls += ' jie';
+      if (S.sel === i2) cls += ' sel';
+      if (v.need === 'place') cls += ' tap';
+      else if (v.need === 'second') {
+        if (jt.indexOf(i2) >= 0) cls += ' tap';
+        else if (c === EMPTY && (anchors.length === 0 || anchors.indexOf(i2) >= 0)) cls += ' tap';
+      } else if (v.need === 'hidden' && c === EMPTY) cls += ' tap';
+      cells[i2].className = cls;
+    }
+
+    // ── 消息 + 按钮
+    var msg = '', btns = [];
+    if (!v.both) {
+      msg = '把下面这个地址发给朋友，等他进桌 —— 或者再开一个浏览器标签页自己试。';
+      btns.push({ t: '复制地址', ghost: true, f: copyLink });
+    } else if (v.over) {
+      var win = v.winner === me ? '你赢了' : v.winner === -1 ? '和棋' : '你输了';
+      var mb = (v.blobs[me][0] || 0), ob = (v.blobs[op][0] || 0);
+      msg = '<em>' + win + '</em>　最大块 ' + mb + ' : ' + ob + '　劫灰 ' + v.ashCount;
+      btns.push({ t: '再来一局', wide: true, f: function () { act({ type: 'rematch' }); } });
+      if (v.rematch[me]) msg += '<br>等对手确认，然后重新选弈士…';
+    } else if (v.need === 'bid') {
+      msg = '第 ' + v.round + ' 轮 —— 暗出几币抢先手？<br><s>赢的人把币付给对手；出价低的可以加价，也可以放弃。都不加价，这轮就直接打暗轮。</s>';
+      var mx = v.coins[me];
+      for (var b = 0; b <= Math.min(mx, 4); b++) {
+        btns.push({ t: b + ' 币', f: (function (n) { return function () { act({ type: 'bid', amount: n }); }; })(b) });
+      }
+      if (mx > 4) btns.push({ t: '全押 ' + mx, jieStyle: true, f: function () { act({ type: 'bid', amount: mx }); } });
+    } else if (v.need === 'tie') {
+      msg = '双方都出了 <em>' + v.tieBid + '</em> 币。<br>再加就得高于它，不加就不用花钱 —— 两边都不加，这轮直接打暗轮。';
+      btns.push({ t: '不加', wide: true, ghost: true, f: function () { act({ type: 'tie', amount: null }); } });
+      for (var t1 = 1; t1 <= 3; t1++) {
+        var amt = v.tieBid + t1;
+        if (amt > v.coins[me]) break;
+        btns.push({ t: '加到 ' + amt, jieStyle: true, f: (function (n) { return function () { act({ type: 'tie', amount: n }); }; })(amt) });
+      }
+    } else if (v.need === 'raise') {
+      var hi = v.auctionHi, byMe = v.auctionHiBy === me;
+      msg = (byMe ? '你' : '对手') + ' 现在出 <em>' + hi + '</em> 币。' +
+        (byMe ? '<br>等对手决定加价还是放弃…' : '<br>你要加得比他高，或者放弃。');
+      if (!byMe) {
+        btns.push({ t: '放弃', wide: true, ghost: true, f: function () { act({ type: 'raise', amount: null }); } });
+        for (var r1 = 1; r1 <= 3; r1++) {
+          var a2 = hi + r1;
+          if (a2 > v.coins[me]) break;
+          btns.push({ t: '加到 ' + a2, jieStyle: true, f: (function (n) { return function () { act({ type: 'raise', amount: n }); }; })(a2) });
+        }
+      }
+    } else if (v.need === 'order') {
+      msg = '你以 <em>' + v.auctionHi + '</em> 币抢下了先手。选自己先动，还是后动？';
+      btns.push({ t: '我先动', wide: true, f: function () { act({ type: 'order', choice: 'first' }); } });
+      btns.push({ t: '让对手先', wide: true, ghost: true, f: function () { act({ type: 'order', choice: 'second' }); } });
+    } else if (v.need === 'place') {
+      msg = '你先手 —— 任意空格落一子。<br><s>红圈里是对方没保护的子，点它就把它烧成劫灰（那一手不放子）。</s>';
+    } else if (v.need === 'second') {
+      msg = (v.anchors || []).length
+        ? '贴着蓝点落一子。<br><s>红圈里是对方没保护的子，点它就直接烧成劫灰。</s>'
+        : '没有可贴的点，任意空格都行。';
+    } else if (v.need === 'hidden') {
+      if (S.sel != null) {
+        msg = '就落在一闪一闪这格？确认后不能改。';
+        btns.push({ t: '确认落子', wide: true, f: function () { act({ type: 'place', cell: S.sel }); } });
+        btns.push({ t: '重选', ghost: true, f: function () { S.sel = null; render(); } });
+      } else {
+        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰。';
+      }
+      var owned = (v.items[me] || []);
+      if (owned.length) btns.push({ t: '用道具 (' + owned.length + ')', ghost: true, f: openShop });
+    } else {
+      msg = (v.phase === 'auction' && v.myBid != null) ? '已出 <em>' + v.myBid + '</em> 币，等对手…'
+        : v.phase === 'tie-raise' && v.tieMine !== null ? '已选，等对手…'
+          : '等对手行动…';
+    }
+    if (S.note) msg += '<br><span style="color:#b4483a">' + S.note + '</span>';
+    $('#msg').innerHTML = msg;
+
+    var bx2 = $('#btns'); bx2.innerHTML = '';
+    if (!v.over) {
+      var sb = document.createElement('button');
+      sb.className = 'shopbtn'; sb.textContent = '商店';
+      sb.onclick = openShop;
+      bx2.appendChild(sb);
+    }
+    btns.forEach(function (b) {
+      var el = document.createElement('button');
+      el.textContent = b.t;
+      if (b.ghost) el.className = 'ghost';
+      if (b.jieStyle) el.className = 'jiebtn';
+      if (b.wide) el.className = (el.className ? el.className + ' ' : '') + 'wide';
+      el.onclick = b.f;
+      bx2.appendChild(el);
+    });
+
+    // ── 底部
+    var last = '';
+    if (v.log && v.log.length) {
+      var l = v.log[v.log.length - 1];
+      if (l.t === 'jie') last = (l.p === me ? '你' : '对手') + ' 盖掉一颗子，成劫灰';
+      else if (l.t === 'collide') last = '两人撞在同一格 · 成灰';
+      else if (l.t === 'won') last = (l.p === me ? '你' : '对手') + ' 以 ' + l.price + ' 币抢下先手';
+      else if (l.t === 'auction-none') last = '没人加价，这轮改走暗轮';
+      else if (l.t === 'buy') last = (l.p === me ? '你' : '对手') + ' 买了一件东西';
+      else if (l.t === 'order') last = (l.first === me ? '你' : '对手') + ' 先动';
+    }
+    $('#log').textContent = last;
+    $('#room').innerHTML = '房号 <code>' + v.room + '</code>';
+
+    renderShop();
+    if (v.need !== 'hidden') S.sel = null;
+  }
+
+  function openShop() { S.shop = true; render(); }
+
+  function renderShop() {
+    var box = $('#shop'), v = S.view;
+    if (!S.shop || !v || v.picking) { box.className = ''; return; }
+    box.className = 'on';
+    var me = v.seat, list = v.shop || [], mine = v.items[me] || [];
+    var host = $('#shopList'); host.innerHTML = '';
+    list.forEach(function (it) {
+      var owned = mine.filter(function (x) { return x === it.id; }).length;
+      var row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = '<div class="lf"><div class="nm">' + it.name + '</div>' +
+        '<div class="ds">' + it.desc + '</div></div>' +
+        '<div class="ct">' + it.price + ' 币<br>' + (owned ? '有 ' + owned + ' 件' : '') + '</div>';
+      var buy = document.createElement('button');
+      buy.textContent = '买';
+      buy.disabled = (v.coins[me] || 0) < it.price || v.over;
+      buy.onclick = function () { act({ type: 'buy', id: it.id }); };
+      row.appendChild(buy);
+      if (owned > 0 && v.need === 'hidden' && it.when === 'hidden') {
+        var use = document.createElement('button');
+        use.className = 'ghost'; use.textContent = '用';
+        use.onclick = function () { act({ type: 'use', id: it.id }); };
+        row.appendChild(use);
+      }
+      host.appendChild(row);
+    });
+    $('#shopClose').onclick = function () { S.shop = false; render(); };
+  }
+
+  function copyLink() {
+    var url = location.origin + '/#' + S.room;
+    var done = function () { $('#msg').innerHTML = '链接已复制：<br><code>' + url + '</code>'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { prompt('复制这个地址', url); });
+    } else prompt('复制这个地址', url);
+  }
+
+  var hash = (location.hash || '').replace('#', '').trim().toUpperCase();
+  var saved = sessionStorage.getItem('jh_room');
+  join(hash || saved || '');
+})();
+</script>
+</body>
+</html>

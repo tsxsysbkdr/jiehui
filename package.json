@@ -1,0 +1,13 @@
+{
+  "name": "jiehui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "劫灰 · 双人水墨棋盘（零依赖，Node 内置 http + 长轮询）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
