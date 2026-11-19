@@ -1,4 +1,4 @@
-// 劫灰 · 规则引擎 v8（浏览器 / Node 通用）
+﻿// 劫灰 · 规则引擎 v8（浏览器 / Node 通用）
 // v8 变更（用户 m01004 / m01012 的反馈）：
 //   1. **暗轮固定存在，不再靠竞拍决定**：明轮打完必进暗轮，暗轮打完必回竞拍。
 //      没有奇偶排期，只有这两种转移。竞拍同价且都不加价 → 本轮跳过明轮直接打暗轮，
@@ -23,6 +23,9 @@
     totalRounds: 20,
     startCoins: 6,
     coinPerRound: 1,
+    // 明轮后手「必须贴着一手落」的限制。v9 起默认关掉：想落哪就落哪。
+    // 引擎里 anchors() 整套还在，以后做成弈士技能时把这里打开即可。
+    anchorRule: false,
     anchorSelf: true,
     champs: ['wufeng', 'wufeng']
   };
@@ -103,7 +106,9 @@
     this.round = 1;
     this.roundMode = 'pending';   // 'pending'（竞拍中，结果未定）| 'open' | 'hidden'
     this.ashCount = 0;
-    this.jieCount = [0, 0];
+    this.killCount = [0, 0];   // 明轮：落子盖掉对手一子 = 「杀」
+    this.jieCount = [0, 0];    // 兼容旧字段，v9 起不再自增
+    this.jieTotal = 0;         // 暗轮两人撞在同一格 = 「劫」（无妄之灾，不算谁的）
     this.bidLoss = [0, 0];
     this.over = false;
     this.winner = null;
@@ -119,6 +124,8 @@
     this.first = null;
     this.pending = { openFirst: null, hidden: [null, null] };
     this.items = [[], []];
+    this.fxSeq = 0;
+    this.fx = [];              // 成灰事件流水，给前端放「杀／劫」特效（只增不清）
     this.phase = 'auction';
   }
 
@@ -256,34 +263,38 @@
 
     // ── 劫：落子覆盖敌方不受保护的子，那格成灰 ──────────────
     // 受保护 = 本明轮先手当轮刚下的那颗（placedAt === round）。
-    isJieTarget: function (cell, byP) {
+    isKillTarget: function (cell, byP) {
       var owner = 1 - byP;
       return this.cells[cell] === owner + 1 &&
         this.placedAt[cell] > 0 &&
         this.placedAt[cell] < this.round;
     },
     // 当前玩家所有可劫的格子（就是可以覆盖的敌方老子的格）
-    jieTargetsFor: function (p) {
+    killTargetsFor: function (p) {
       var out = [];
-      for (var i = 0; i < this.cells.length; i++) if (this.isJieTarget(i, p)) out.push(i);
+      for (var i = 0; i < this.cells.length; i++) if (this.isKillTarget(i, p)) out.push(i);
       return out;
     },
 
-    _makeAsh: function (cell) {
+    // kind: 'kill'（明轮落子盖杀敌子）| 'jie'（暗轮两人撞在同一格，无妄之灾）
+    _makeAsh: function (cell, kind) {
       this.cells[cell] = ASH;
       this.placedAt[cell] = 0;
       this.ashCount++;
+      // 特效流水：前端只看 fx 里比自己见过的序号更新的事件
+      this.fxSeq++;
+      this.fx.push({ id: this.fxSeq, cell: cell, kind: kind || 'jie' });
     },
 
     // ── 落子 ──────────────────────────────────────────────
-    // 先手：任意空格，或者任意可劫的敌方子所在格（后者成灰）
+    // 先手：任意空格，或者任意可杀的敌方子所在格（后者成灰）
     openPlaceFirst: function (cell) {
       if (this.phase !== 'open-first') throw new Error('phase:' + this.phase);
       var p = this.first;
-      if (this.isJieTarget(cell, p)) {
-        this._makeAsh(cell);
-        this.jieCount[p]++;
-        this.roundLog.push({ t: 'jie', p: p, cell: cell, victim: 1 - p });
+      if (this.isKillTarget(cell, p)) {
+        this._makeAsh(cell, 'kill');
+        this.killCount[p]++;
+        this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: 1 - p });
         // 这一手没落子（把对方的子烧了），所以没有「这一手」可以贴 ——
         // 后手因此不受贴点约束，anchors() 返回空数组即视作自由落子。
         this.pending.openFirst = null;
@@ -299,8 +310,14 @@
       return cell;
     },
 
-    // 明轮后手合法落点：贴对手这一手 ∪ 贴自己的子；再加上所有可劫的敌子格
+    // 明轮后手合法落点：贴对手这一手 ∪ 贴自己的子；再加上所有可杀的敌子格
+    // anchorRule 关掉时返回全部空格（想落哪就落哪）。
     anchors: function () {
+      if (!this.o.anchorRule) {
+        var all = [];
+        for (var i = 0; i < this.cells.length; i++) if (this.cells[i] === EMPTY) all.push(i);
+        return all;
+      }
       var f = this.pending.openFirst;
       if (f == null) return [];
       var s = this.size, fx = f % s, fy = (f / s) | 0;
@@ -327,10 +344,10 @@
       return out;
     },
 
-    // 后手能点的所有格子：贴点里的空格 + 可劫的敌子格（劫不受贴约束）
+    // 后手能点的所有格子：贴点里的空格 + 可杀的敌子格（杀不受贴约束）
     secondOptions: function () {
       var p = 1 - this.first;
-      var a = this.anchors(), j = this.jieTargetsFor(p);
+      var a = this.anchors(), j = this.killTargetsFor(p);
       return a.concat(j);
     },
 
@@ -338,10 +355,10 @@
       if (this.phase !== 'open-second') throw new Error('phase:' + this.phase);
       var p = 1 - this.first;
       var cell = action.cell;
-      if (this.isJieTarget(cell, p)) {
-        this._makeAsh(cell);
-        this.jieCount[p]++;
-        this.roundLog.push({ t: 'jie', p: p, cell: cell, victim: this.first });
+      if (this.isKillTarget(cell, p)) {
+        this._makeAsh(cell, 'kill');
+        this.killCount[p]++;
+        this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: this.first });
         return this._endRound();
       }
       var anchors = this.anchors();
@@ -363,8 +380,10 @@
       if (this.pending.hidden[0] == null || this.pending.hidden[1] == null) return null;
       var a = this.pending.hidden[0], b = this.pending.hidden[1];
       if (a === b) {
-        this._makeAsh(a);
-        this.roundLog.push({ t: 'collide', cell: a });
+        // 暗轮两人撞在同一格 = 「劫」，无妄之灾，两边都没得着，所以不记给谁
+        this._makeAsh(a, 'jie');
+        this.jieTotal++;
+        this.roundLog.push({ t: 'jie', cell: a });
       } else {
         this.cells[a] = BLACK;
         this.placedAt[a] = this.round;
@@ -452,6 +471,7 @@
         score: this.finalScore || [this.score(0), this.score(1)],
         blobs: this.finalBlobs || [this.blobs(0), this.blobs(1)],
         ash: this.ashCount, rounds: this.round, coins: this.coins.slice(),
+        kill: this.killCount.slice(),
         jie: this.jieCount.slice(),
         items: [this.items[0].slice(), this.items[1].slice()],
         champ: [this.champ[0].id, this.champ[1].id]

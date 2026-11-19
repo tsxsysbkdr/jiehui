@@ -112,8 +112,12 @@ function view(r, seat) {
     cells: g.cells.slice(),
     coins: g.coins.slice(),
     ashCount: g.ashCount,
+    kills: g.killCount.slice(),      // 明轮「杀」的次数，各自记
+    jies: g.jieTotal,                // 暗轮「劫」的总次数（无妄之灾，不算谁的）
+    scores: [g.blobs(0)[0] || 0, g.blobs(1)[0] || 0],   // 实时计分：当前最大连通块
     jied: g.jieCount.slice(),
     first: g.first,
+    lastCell: g.pending.openFirst,   // 本明轮先手刚落的那一子，前端给它一圈脉冲
     auctionWinner: g.auctionWinner,
     auctionHi: g.auctionHi,
     auctionHiBy: g.auctionHiBy,
@@ -130,16 +134,17 @@ function view(r, seat) {
     blobs: [g.blobs(0), g.blobs(1)],
     champ: [g.champ[0], g.champ[1]],
     log: g.roundLog.slice(),
+    fx: g.fx.slice(-8),
     items: [g.items[0].slice(), g.items[1].slice()],
     shop: ITEMS,
     rematch: r.rematch.slice()
   };
 
-  // 劫 = 落子覆盖：把「能覆盖的敌方老子」的格子告诉前端，让它们可点
+  // 杀 = 落子覆盖：把「能覆盖的敌方老子」的格子告诉前端，让它们可点
   if (need === 'place' || need === 'second') {
-    v.jieTargets = g.jieTargetsFor(seat);
+    v.killTargets = g.killTargetsFor(seat);
   }
-  if (need === 'second') v.anchors = g.anchors();
+  if (need === 'second' && g.o.anchorRule) v.anchors = g.anchors();
   return v;
 }
 
@@ -234,16 +239,18 @@ function act(r, seat, a) {
     if (cell < 0 || cell >= g.cells.length) return '格子无效';
     if (g.phase === 'open-first') {
       if (g.first !== seat) return '现在不是你先手';
-      const isJie = g.isJieTarget(cell, seat);
-      if (!isJie && g.cells[cell] !== EMPTY) return '这格已经有子了';
+      const isKill = g.isKillTarget(cell, seat);
+      if (!isKill && g.cells[cell] !== EMPTY) return '这格已经有子了';
       g.openPlaceFirst(cell);
     } else if (g.phase === 'open-second') {
       if ((1 - g.first) !== seat) return '现在不是你的回合';
-      const isJie = g.isJieTarget(cell, seat);
-      if (!isJie) {
+      const isKill = g.isKillTarget(cell, seat);
+      if (!isKill) {
         if (g.cells[cell] !== EMPTY) return '这格已经有子了';
-        const an = g.anchors();
-        if (an.length > 0 && an.indexOf(cell) === -1) return '必须贴着落子（或者去盖掉对方无保护的子）';
+        if (g.o.anchorRule) {
+          const an = g.anchors();
+          if (an.length > 0 && an.indexOf(cell) === -1) return '必须贴着落子（或者去盖掉对方无保护的子）';
+        }
       }
       g.openSecond({ type: 'place', cell: cell });
     } else if (g.phase === 'hidden') {

@@ -37,6 +37,9 @@ body{
 .dot.w{background:radial-gradient(circle at 36% 30%,#fffefb,#f0eadc 55%,#cdc4af 100%);
   box-shadow:inset 0 0 0 1px rgba(110,98,76,.35),0 1px 2px rgba(0,0,0,.16)}
 .side .nm{flex:1;color:#5a5245}
+.side .sc{font-size:11px;color:#4a5a4a;font-variant-numeric:tabular-nums;
+  background:rgba(90,120,90,.12);border-radius:6px;padding:1px 6px;white-space:nowrap}
+.side .sc b{font-size:13px;font-weight:700}
 .side .cn{font-variant-numeric:tabular-nums;font-weight:600;color:#7a6a45}
 .side .cn small{font-weight:400;opacity:.65}
 
@@ -46,10 +49,17 @@ body{
   position:relative;
   width:min(92vw,352px,50dvh);aspect-ratio:1;
   background-color:#e8ddc3;
-  background-image:linear-gradient(160deg,rgba(255,255,255,.35),rgba(160,140,105,.1));
+  background-image:
+    repeating-linear-gradient(92.5deg,rgba(152,126,86,.05) 0 1px,rgba(255,255,255,0) 1px 6px),
+    repeating-linear-gradient(3.5deg,rgba(122,98,62,.038) 0 1px,rgba(255,255,255,0) 1px 13px),
+    radial-gradient(130% 95% at 28% 6%,rgba(255,255,255,.52) 0%,rgba(255,255,255,0) 58%),
+    radial-gradient(85% 70% at 82% 96%,rgba(108,86,54,.17) 0%,rgba(255,255,255,0) 72%),
+    linear-gradient(160deg,rgba(255,255,255,.3),rgba(160,140,105,.12));
   border-radius:3px;
   box-shadow:
-    0 1px 0 rgba(255,255,255,.8) inset,
+    inset 0 0 26px rgba(96,72,42,.2),
+    inset 0 1px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(96,72,42,.22),
     0 0 0 1px rgba(122,101,68,.5),
     0 0 0 6px #efe6d1,
     0 0 0 7px rgba(122,101,68,.42),
@@ -62,12 +72,10 @@ body{
 #grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr)}
 .cell{position:relative;cursor:default}
 .cell.tap{cursor:pointer}
-.cell.tap::after{content:'';position:absolute;inset:22%;border-radius:50%;
-  background:rgba(104,86,56,.16);opacity:0;transition:opacity .15s}
-.cell.tap:active::after{opacity:1}
+.cell.tap:active{background:radial-gradient(circle,rgba(104,86,56,.2) 0 33%,transparent 34%)}
 
 /* 棋子：黑子 / 白子，圆点在交叉点正中 */
-.cell.b::after,.cell.w::after{content:'';position:absolute;inset:9%;border-radius:50%}
+.cell.b::after,.cell.w::after{content:'';position:absolute;inset:9%;border-radius:50%;z-index:2}
 .cell.b::after{
   background:radial-gradient(circle at 34% 26%,#7c7872 0%,#3a3835 26%,#161514 62%,#050505 100%);
   box-shadow:inset 0 -1px 3px rgba(0,0,0,.6),inset 0 1px 2px rgba(255,255,255,.22),0 2px 5px rgba(0,0,0,.4);
@@ -95,11 +103,74 @@ body{
 }
 
 .cell.anchor::after{content:'';position:absolute;inset:39%;border-radius:50%;
-  background:rgba(64,110,160,.6);pointer-events:none}
-.cell.jie::before{content:'';position:absolute;inset:2%;border:2px solid rgba(150,36,28,.92);
-  border-radius:50%;pointer-events:none;animation:pl 1.4s infinite}
-@keyframes pl{0%,100%{opacity:.95}50%{opacity:.28}}
-.cell.sel::before{content:'';position:absolute;inset:16%;border:2px dashed rgba(64,110,160,.9);border-radius:50%}
+  background:rgba(64,110,160,.6);pointer-events:none;z-index:3}
+/* 本明轮先手刚落的子：一圈暖光，防止「看不见自己那颗」 */
+.cell.last::before{content:'';position:absolute;inset:1%;border-radius:50%;
+  box-shadow:0 0 0 1.5px rgba(176,132,52,.85),0 0 10px rgba(176,132,52,.6);
+  pointer-events:none;z-index:1;animation:lastpulse 1.8s ease-in-out infinite}
+@keyframes lastpulse{
+  0%,100%{opacity:.55}
+  50%{opacity:1}
+}
+/* 可杀的敌子：红圈套在棋子外面，子本身照旧显示 */
+.cell.kill::before{content:'';position:absolute;inset:-3%;border:2px solid rgba(163,32,24,.95);
+  border-radius:50%;pointer-events:none;z-index:1;animation:pl 1.5s infinite}
+@keyframes pl{
+  0%,100%{box-shadow:0 0 3px rgba(163,32,24,.35)}
+  50%{box-shadow:0 0 11px rgba(163,32,24,.85)}
+}
+.cell.sel::before{content:'';position:absolute;inset:16%;border:2px dashed rgba(64,110,160,.9);border-radius:50%;z-index:3}
+
+/* ── 成灰特效：杀（红，主动）／劫（蓝灰，无妄之灾）──────── */
+#fx{position:absolute;inset:0;pointer-events:none;z-index:20}
+.fx{position:absolute;width:11.12%;height:11.12%;pointer-events:none;
+  transform:translate(-50%,-50%);display:grid;place-items:center}
+.fx .ink{position:absolute;inset:-55%;border-radius:47% 53% 45% 55%/55% 45% 53% 47%;
+  filter:blur(.5px);animation:fxink .9s cubic-bezier(.2,.7,.3,1) forwards}
+
+/* 杀：暗红，从中心炸开 */
+.fx.kill .ink{
+  background:radial-gradient(circle at 46% 44%,rgba(163,26,20,.9) 0%,rgba(126,42,36,.62) 36%,rgba(96,26,22,.22) 58%,rgba(126,42,36,0) 74%);
+}
+.fx.kill .word{color:#7e1a14;
+  text-shadow:0 0 5px rgba(255,246,232,.95),0 0 12px rgba(255,246,232,.7)}
+
+/* 劫：蓝灰，像被水浸透的一块，慢慢洇开，没有冲击力 */
+.fx.jie .ink{
+  background:radial-gradient(circle at 50% 46%,rgba(78,96,112,.78) 0%,rgba(96,110,124,.5) 34%,rgba(112,124,136,.2) 56%,rgba(112,124,136,0) 74%);
+  animation:fxdamp 1.15s ease-out forwards}
+@keyframes fxdamp{
+  0%{transform:scale(.3);opacity:.55}
+  40%{transform:scale(1.3);opacity:.8}
+  100%{transform:scale(2.4);opacity:0}
+}
+.fx.jie .word{color:#42525f;
+  text-shadow:0 0 5px rgba(250,248,242,.95),0 0 13px rgba(250,248,242,.75);
+  animation:fxword 1.2s ease-out forwards}
+
+@keyframes fxink{
+  0%{transform:scale(.12);opacity:1}
+  45%{transform:scale(1.55);opacity:.82}
+  100%{transform:scale(3.1);opacity:0}
+}
+.fx .word{position:absolute;inset:0;display:grid;place-items:center;
+  font-size:12px;letter-spacing:1.5px;font-weight:700;
+  white-space:nowrap;animation:fxword 1.05s ease-out forwards}
+@keyframes fxword{
+  0%{transform:scale(.5);opacity:0}
+  22%{transform:scale(1.4);opacity:1}
+  60%{transform:scale(1.15);opacity:.95}
+  100%{transform:scale(1.3) translateY(-15px);opacity:0}
+}
+/* 杀才震；劫不震 —— 一个是动手，一个是天灾 */
+#board.hit{animation:hit .34s cubic-bezier(.36,.07,.19,.97)}
+@keyframes hit{
+  0%,100%{transform:translate(0,0)}
+  18%{transform:translate(-2.5px,1.5px)}
+  42%{transform:translate(2.5px,-1.5px)}
+  68%{transform:translate(-1.5px,-1px)}
+  85%{transform:translate(1px,1px)}
+}
 
 /* ── 操作区 ─────────────────────────── */
 #bar{flex:none;padding:6px 14px calc(12px + env(safe-area-inset-bottom));min-height:120px}
@@ -115,10 +186,11 @@ button{
 button:active{transform:scale(.96)}
 button:disabled{opacity:.38;cursor:default}
 button.ghost{background:rgba(255,255,255,.6);color:#3f3a32;box-shadow:inset 0 0 0 1px rgba(120,105,80,.35)}
-button.jiebtn{background:#8c3b30}
+button.accentbtn{background:#8c3b30}
 button.shopbtn{background:rgba(255,255,255,.5);color:#5a5040;box-shadow:inset 0 0 0 1px rgba(120,105,80,.35);
   font-size:13px;padding:10px 13px;min-width:0}
 button.wide{padding:11px 24px}
+button.small{font-size:13px;padding:9px 12px;min-width:46px;border-radius:9px}
 #log{font-size:11px;color:#8a8070;text-align:center;margin-top:6px;height:15px;overflow:hidden}
 #room{font-size:11px;color:#8a7f6b;text-align:center;margin-top:4px}
 #room code{background:rgba(255,255,255,.6);padding:1px 5px;border-radius:4px;letter-spacing:1.5px;color:#5a5245}
@@ -152,13 +224,14 @@ button.wide{padding:11px 24px}
 </div>
 
 <div id="sides">
-  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="cn">0<small>币</small></div></div>
-  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">对手</div><div class="cn">0<small>币</small></div></div>
+  <div class="side" id="sideMe"><div class="dot"></div><div class="nm">你</div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
+  <div class="side" id="sideOpp"><div class="dot"></div><div class="nm">对手</div><div class="sc"></div><div class="cn">0<small>币</small></div></div>
 </div>
 
 <div id="wrap"><div id="board">
   <svg viewBox="0 0 9 9" preserveAspectRatio="none" id="lines"></svg>
   <div id="grid"></div>
+  <div id="fx"></div>
 </div></div>
 
 <div id="bar">
@@ -181,7 +254,7 @@ button.wide{padding:11px 24px}
   var EMPTY = 0, BLACK = 1, WHITE = 2, ASH = 3;
   var N = 9;
 
-  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false };
+  var S = { room: null, token: null, seat: -1, view: null, sel: null, busy: false, note: '', shop: false, fxSeen: -1 };
 
   function $(s) { return document.querySelector(s); }
   function nameOf(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].name; return id; }
@@ -280,8 +353,8 @@ button.wide{padding:11px 24px}
     var v = S.view; if (!v || v.over || !v.both) return;
     var i = +this.dataset.i;
     if (v.need === 'place' || v.need === 'second') {
-      var isJie = (v.jieTargets || []).indexOf(i) >= 0;
-      if (isJie) { act({ type: 'place', cell: i }); return; }
+      var isKill = (v.killTargets || []).indexOf(i) >= 0;
+      if (isKill) { act({ type: 'place', cell: i }); return; }
       if (v.cells[i] !== EMPTY) return;
       if (v.need === 'second') {
         var an = v.anchors || [];
@@ -300,6 +373,7 @@ button.wide{padding:11px 24px}
   function render() {
     var v = S.view; if (!v) return;
     var me = v.seat, op = 1 - v.seat;
+    processFx(v);
 
     // ── 选人界面（只有一个无锋，但流程留着）
     if (v.picking) {
@@ -327,12 +401,10 @@ button.wide{padding:11px 24px}
           return '<b>' + c.name + '</b>　' + c.desc + '（起手 ' + c.coins + ' 币）';
         }).join('<br>');
       }
-      if (v.both) {
-        var cpBtn = document.createElement('button');
-        cpBtn.className = 'ghost'; cpBtn.textContent = '复制邀请链接';
-        cpBtn.onclick = copyLink;
-        bx.appendChild(cpBtn);
-      }
+      var cpBtn = document.createElement('button');
+      cpBtn.className = 'ghost'; cpBtn.textContent = '复制邀请链接';
+      cpBtn.onclick = copyLink;
+      bx.appendChild(cpBtn);
       $('#log').innerHTML = '';
       $('#log').style.height = 'auto';
       $('#log').appendChild(desc);
@@ -347,7 +419,9 @@ button.wide{padding:11px 24px}
       ? '竞拍' : v.roundMode === 'open' ? '明轮' : v.roundMode === 'hidden' ? '暗轮' : '';
     $('#roundTxt').textContent = v.round + '/' + v.totalRounds + ' 轮 · ' + modeTxt;
     var ab = $('#ashbar'); ab.innerHTML = '';
-    var pips = Math.max(14, v.ashCount);
+    // 劫灰格子数跟着「这局最多可能有多少灰」走，不是死写 14：
+    // 9×9 最多 81 格，但一局实际就十来格，留一点余量按 10 的倍数加。
+    var pips = Math.max(12, Math.ceil((v.ashCount + 2) / 10) * 10);
     for (var k = 0; k < pips; k++) {
       var e = document.createElement('i');
       if (k < v.ashCount) e.className = 'on';
@@ -355,22 +429,26 @@ button.wide{padding:11px 24px}
     }
     $('#ashTxt').textContent = v.ashCount;
 
-    // ── 双方
+    // ── 双方：实时计分（当前最大连通块）+ 持币
+    var scores = v.scores || [0, 0];
     $('#sideMe .dot').className = 'dot ' + (me === 0 ? 'b' : 'w');
     $('#sideMe .nm').textContent = '你';
+    $('#sideMe .sc').innerHTML = '地 <b>' + (scores[me] || 0) + '</b>';
     $('#sideMe .cn').innerHTML = (v.coins[me] || 0) + '<small>币</small>';
     $('#sideOpp .dot').className = 'dot ' + (op === 0 ? 'b' : 'w');
     $('#sideOpp .nm').textContent = '对手';
+    $('#sideOpp .sc').innerHTML = '地 <b>' + (scores[op] || 0) + '</b>';
     $('#sideOpp .cn').innerHTML = (v.coins[op] || 0) + '<small>币</small>';
 
     // ── 棋盘
     var anchors = v.need === 'second' ? (v.anchors || []) : [];
-    var jt = (v.need === 'place' || v.need === 'second') ? (v.jieTargets || []) : [];
+    var jt = (v.need === 'place' || v.need === 'second') ? (v.killTargets || []) : [];
     for (var i2 = 0; i2 < N * N; i2++) {
       var c = v.cells[i2], cls = 'cell';
       if (c === BLACK) cls += ' b'; else if (c === WHITE) cls += ' w'; else if (c === ASH) cls += ' a';
       if (anchors.indexOf(i2) >= 0) cls += ' anchor';
-      if (jt.indexOf(i2) >= 0) cls += ' jie';
+      if (jt.indexOf(i2) >= 0) cls += ' kill';
+      if (v.lastCell != null && v.lastCell === i2) cls += ' last';
       if (S.sel === i2) cls += ' sel';
       if (v.need === 'place') cls += ' tap';
       else if (v.need === 'second') {
@@ -394,17 +472,18 @@ button.wide{padding:11px 24px}
     } else if (v.need === 'bid') {
       msg = '第 ' + v.round + ' 轮 —— 暗出几币抢先手？<br><s>赢的人把币付给对手；出价低的可以加价，也可以放弃。都不加价，这轮就直接打暗轮。</s>';
       var mx = v.coins[me];
-      for (var b = 0; b <= Math.min(mx, 4); b++) {
-        btns.push({ t: b + ' 币', f: (function (n) { return function () { act({ type: 'bid', amount: n }); }; })(b) });
+      var cap = Math.min(mx, 8);
+      for (var b = 0; b <= cap; b++) {
+        btns.push({ t: b + ' 币', small: true, f: (function (n) { return function () { act({ type: 'bid', amount: n }); }; })(b) });
       }
-      if (mx > 4) btns.push({ t: '全押 ' + mx, jieStyle: true, f: function () { act({ type: 'bid', amount: mx }); } });
+      if (mx > cap) btns.push({ t: '全押 ' + mx, small: true, accent: true, f: function () { act({ type: 'bid', amount: mx }); } });
     } else if (v.need === 'tie') {
       msg = '双方都出了 <em>' + v.tieBid + '</em> 币。<br>再加就得高于它，不加就不用花钱 —— 两边都不加，这轮直接打暗轮。';
       btns.push({ t: '不加', wide: true, ghost: true, f: function () { act({ type: 'tie', amount: null }); } });
       for (var t1 = 1; t1 <= 3; t1++) {
         var amt = v.tieBid + t1;
         if (amt > v.coins[me]) break;
-        btns.push({ t: '加到 ' + amt, jieStyle: true, f: (function (n) { return function () { act({ type: 'tie', amount: n }); }; })(amt) });
+        btns.push({ t: '加到 ' + amt, accent: true, f: (function (n) { return function () { act({ type: 'tie', amount: n }); }; })(amt) });
       }
     } else if (v.need === 'raise') {
       var hi = v.auctionHi, byMe = v.auctionHiBy === me;
@@ -415,7 +494,7 @@ button.wide{padding:11px 24px}
         for (var r1 = 1; r1 <= 3; r1++) {
           var a2 = hi + r1;
           if (a2 > v.coins[me]) break;
-          btns.push({ t: '加到 ' + a2, jieStyle: true, f: (function (n) { return function () { act({ type: 'raise', amount: n }); }; })(a2) });
+          btns.push({ t: '加到 ' + a2, accent: true, f: (function (n) { return function () { act({ type: 'raise', amount: n }); }; })(a2) });
         }
       }
     } else if (v.need === 'order') {
@@ -423,18 +502,16 @@ button.wide{padding:11px 24px}
       btns.push({ t: '我先动', wide: true, f: function () { act({ type: 'order', choice: 'first' }); } });
       btns.push({ t: '让对手先', wide: true, ghost: true, f: function () { act({ type: 'order', choice: 'second' }); } });
     } else if (v.need === 'place') {
-      msg = '你先手 —— 任意空格落一子。<br><s>红圈里是对方没保护的子，点它就把它烧成劫灰（那一手不放子）。</s>';
+      msg = '你先手 —— 任意空格落一子。<br><s>红圈里是可杀的棋子，点它就连子带格烧成劫灰（那一手不放子）。</s>';
     } else if (v.need === 'second') {
-      msg = (v.anchors || []).length
-        ? '贴着蓝点落一子。<br><s>红圈里是对方没保护的子，点它就直接烧成劫灰。</s>'
-        : '没有可贴的点，任意空格都行。';
+      msg = '任意空格落一子。<br><s>红圈里是可杀的棋子，点它就直接烧成劫灰。</s>';
     } else if (v.need === 'hidden') {
       if (S.sel != null) {
         msg = '就落在一闪一闪这格？确认后不能改。';
         btns.push({ t: '确认落子', wide: true, f: function () { act({ type: 'place', cell: S.sel }); } });
         btns.push({ t: '重选', ghost: true, f: function () { S.sel = null; render(); } });
       } else {
-        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰。';
+        msg = '暗轮 —— 悄悄选一格落子，对方看不到。<br>两人选中同一格，两手都作废，那格成灰 —— 这叫<em>劫</em>。';
       }
       var owned = (v.items[me] || []);
       if (owned.length) btns.push({ t: '用道具 (' + owned.length + ')', ghost: true, f: openShop });
@@ -457,7 +534,8 @@ button.wide{padding:11px 24px}
       var el = document.createElement('button');
       el.textContent = b.t;
       if (b.ghost) el.className = 'ghost';
-      if (b.jieStyle) el.className = 'jiebtn';
+      if (b.accent) el.className = 'accentbtn';
+      if (b.small) el.className = (el.className ? el.className + ' ' : '') + 'small';
       if (b.wide) el.className = (el.className ? el.className + ' ' : '') + 'wide';
       el.onclick = b.f;
       bx2.appendChild(el);
@@ -467,8 +545,8 @@ button.wide{padding:11px 24px}
     var last = '';
     if (v.log && v.log.length) {
       var l = v.log[v.log.length - 1];
-      if (l.t === 'jie') last = (l.p === me ? '你' : '对手') + ' 盖掉一颗子，成劫灰';
-      else if (l.t === 'collide') last = '两人撞在同一格 · 成灰';
+      if (l.t === 'kill') last = (l.p === me ? '你' : '对手') + ' 杀一颗子，成劫灰';
+      else if (l.t === 'jie') last = '两人撞在同一格 —— 劫，成灰';
       else if (l.t === 'won') last = (l.p === me ? '你' : '对手') + ' 以 ' + l.price + ' 币抢下先手';
       else if (l.t === 'auction-none') last = '没人加价，这轮改走暗轮';
       else if (l.t === 'buy') last = (l.p === me ? '你' : '对手') + ' 买了一件东西';
@@ -482,6 +560,46 @@ button.wide{padding:11px 24px}
   }
 
   function openShop() { S.shop = true; render(); }
+
+  // ── 成灰特效：杀（红，主动，有冲击）／劫（蓝灰，无妄之灾）──
+  function playFx(list) {
+    var layer = $('#fx'), board = $('#board');
+    if (!layer) return;
+    var shake = false;
+    list.forEach(function (e, k) {
+      var kind = e.kind === 'jie' ? 'jie' : 'kill';
+      if (kind === 'kill') shake = true;
+      var col = e.cell % N, row = (e.cell / N) | 0;
+      var d = document.createElement('div');
+      d.className = 'fx ' + kind;
+      d.style.left = ((col + .5) * 100 / N) + '%';
+      d.style.top = ((row + .5) * 100 / N) + '%';
+      d.style.animationDelay = (k * 90) + 'ms';
+      var ink = document.createElement('div'); ink.className = 'ink';
+      var w = document.createElement('div'); w.className = 'word';
+      w.textContent = kind === 'jie' ? '劫' : '杀';
+      d.appendChild(ink); d.appendChild(w);
+      layer.appendChild(d);
+      setTimeout(function () { d.remove(); }, 1500 + k * 90);
+    });
+    if (shake) {
+      board.classList.remove('hit');
+      void board.offsetWidth;
+      board.classList.add('hit');
+      setTimeout(function () { board.classList.remove('hit'); }, 400);
+    }
+  }
+
+  function processFx(v) {
+    if (!v || !v.fx || !v.fx.length) return;
+    var last = v.fx[v.fx.length - 1].id;
+    if (S.fxSeen < 0) { S.fxSeen = last; return; }   // 刚进桌/刷新，不补放旧特效
+    if (last < S.fxSeen) { S.fxSeen = last; return; } // 换了一局（序号从 0 重数），不补放
+    if (last === S.fxSeen) return;
+    var fresh = v.fx.filter(function (e) { return e.id > S.fxSeen; });
+    S.fxSeen = last;
+    playFx(fresh);
+  }
 
   function renderShop() {
     var box = $('#shop'), v = S.view;
