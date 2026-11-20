@@ -9,10 +9,12 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { Game, EMPTY, CHAMPIONS, ITEMS, itemOf, MODES } = require('./engine.js');
+const { Game, EMPTY, CHAMPIONS, ITEMS, itemOf, MODES, modeOf } = require('./engine.js');
 
 // 选人界面只给名字：技能说明一律不下发，玩家自己摸索（用户 m03244）。
 const CHAMP_PICK = CHAMPIONS.map((c) => ({ id: c.id, name: c.name }));
+const CHAMP_NAME = {};
+CHAMPIONS.forEach((c) => { CHAMP_NAME[c.id] = c.name; });
 // 模式按钮：名字 + 一句话，规则细节不下发（进游戏自己看规则面板）。
 const MODE_PICK = MODES.map((m) => ({ id: m.id, name: m.name, rounds: m.rounds, coins: m.coins, desc: m.desc }));
 
@@ -116,9 +118,19 @@ function view(r, seat) {
   else if (g.phase === 'auction') need = r.bids[seat] == null ? 'bid' : null;
   else if (g.phase === 'tie-raise') need = g.tieRaise[seat] === null ? 'tie' : null;
   else if (g.phase === 'raise') need = g.auctionTurn === seat ? 'raise' : null;
-  else if (g.phase === 'open-first') need = g.first === seat ? 'place' : null;
+  else if (g.phase === 'open-first') {
+    // v2：竞拍胜者必须先定势（−N / 0 / +N），定完才轮到落子。
+    if (g.first === seat && !g.markDone[seat]) need = 'mark';
+    else need = g.first === seat ? 'place' : null;
+  }
   else if (g.phase === 'open-second') need = (1 - g.first) === seat ? 'second' : null;
-  else if (g.phase === 'hidden') need = (g.pending.hidden[seat] == null && !g.pending.passed[seat]) ? 'hidden' : null;
+  else if (g.phase === 'hidden') {
+    // 混沌局一方要暗选两子：第一子交完还要选集第二子。
+    if (g.pending.passed[seat]) need = null;
+    else if (g.pending.hidden[seat] == null) need = 'hidden';
+    else if (g.isChaos() && g.pending.hidden2[seat] == null) need = 'hidden2';
+    else need = null;
+  }
 
   const v = {
     v: r.version,
@@ -147,6 +159,20 @@ function view(r, seat) {
     shieldUsedThisHidden: g.shieldUsedThisHidden,
     lastIncome: g.lastIncome || null,            // 上一个明轮结算的币，给界面弹一下
     ashCount: g.ashCount,
+    // ── v2：势 / 阶段 / 轮回 ──
+    mark: g.mark,                                // 势
+    markStage2: modeOf(g.o.mode).markStage2,     // 进第二阶段的线
+    markLunhui: modeOf(g.o.mode).markLunhui,     // 轮回的线
+    markMax: g.markMax(),                        // 当前模式的轮回线（= markLunhui）
+    stage: g.stage(),                            // 1 / 2
+    markN: g.markN,                              // 这一轮能调多少（= 夺花掉的气）
+    myMarkDone: !!g.markDone[seat],              // 我的调势做完了没
+    lunhuiCount: g.lunhuiCount,                  // 本局触发过几次轮回
+    lunhuiFx: g.lunhuiFx.slice(-2),              // 轮回特效流水
+    // 5×5 框：先手定下、只约束后手这一手。front 需要知道「我是不是被框住了」。
+    frame: g.frame ? { cells: g.frameCells(), center: g.frame.center } : null,
+    myFrame: (g._frameRestricts(seat) && !g._frameDead()) ? g.frameCells() : null,
+    oppFrame: (g._frameRestricts(1 - seat) && !g._frameDead()) ? g.frameCells() : null,
     kills: g.killCount.slice(),      // 明轮「杀」的次数，各自记
     jies: g.jieTotal,                // 暗轮「劫」的总次数（无妄之灾，不算谁的）
     scores: [g.blobs(0)[0] || 0, g.blobs(1)[0] || 0],   // 实时计分：当前最大连通块
@@ -169,28 +195,42 @@ function view(r, seat) {
     endReason: g.endReason,
     blobs: [g.blobs(0), g.blobs(1)],
     champ: [g.champ[0], g.champ[1]],
+    champNames: [CHAMP_NAME[g.champ[0]] || '', CHAMP_NAME[g.champ[1]] || ''],
     log: g.roundLog.slice(),
     fx: g.fx.slice(-8),
     modeFx: g.modeLog.slice(-4),     // 阶段切换：夺 / 明 / 暗，前端闪一下大字
     incomeFx: g.incomeFx.slice(-2),  // 明轮结算：哪些块发了多少币，前端在那些子上闪金币
-    canGive: (g.phase === 'open-first' && g.first === seat && g.pending.openFirst == null && !g.gaveFirst) ? true : false,
+    // 让先：v2 要求先把势定完（处置权在胜者手里，定完才轮到让或不让）
+    canGive: (g.phase === 'open-first' && g.first === seat && g.pending.openFirst == null && !g.gaveFirst && g.markDone[seat]) ? true : false,
     items: [g.items[0].slice(), g.items[1].slice()],
     // 商店：带上「已买几个 / 上限」，前端据此把按钮置灰
-    shop: ITEMS.map((it) => Object.assign({}, it, {
-      bought: it.id === 'dan' ? g.danBought[seat] : it.id === 'jing' ? g.jingBought[seat] : 0,
-      left: it.limit ? Math.max(0, it.limit - (it.id === 'dan' ? g.danBought[seat] : it.id === 'jing' ? g.jingBought[seat] : 0)) : -1
-    })),
+    shop: ITEMS.map((it) => {
+      // 经的上限跟模式走（混沌每人 3 本，极简/标准 1 本）
+      const lim = it.id === 'jing' ? (modeOf(g.o.mode).jingLimit || it.limit) : it.limit;
+      const had = it.id === 'dan' ? g.danBought[seat] : it.id === 'jing' ? g.jingBought[seat] : 0;
+      return Object.assign({}, it, {
+        limit: lim || 0,
+        bought: had,
+        left: lim ? Math.max(0, lim - had) : -1
+      });
+    }),
     // 技能栏：只发「自己这个弈士」的技能，附带冷却与此刻能不能发动。
     // 对手的技能不发 —— 选人界面不写技能说明，让玩家自己摸索。
     skills: g.skillsOf(seat).map((sk, k) => ({
       id: sk.id, name: sk.name, cd: sk.cd, when: sk.when,
-      qi: sk.id === 'huang' || sk.id === 'fu' ? 4 : (sk.qi || 0),
+      qi: sk.qi || 0,
       // 气够不够 / 这一手时机到不到，是两件事：气够但现在不是时候 → 显示成灰的就绪，
       // 不能写「缺气」，那会让人误以为在攒气。
-      enough: g.qi[seat] >= (sk.id === 'huang' || sk.id === 'fu' ? 4 : (sk.qi || 0)),
+      enough: g.qi[seat] >= (sk.qi || 0),
       wait: g.skillWait(seat, k),
       ready: g.canUseSkill(seat, k),
-      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[seat].indexOf(sk.id) >= 0 : (sk.id === 'fu' ? g.fuUsed[seat] : false)
+      // v2：覆改成「还有几次」（fuCharges），拂尘升级后是「充能几点」
+      charges: sk.charges != null ? sk.charges : null,
+      charge: sk.charge != null ? sk.charge : null,
+      chargeMax: sk.chargeMax != null ? sk.chargeMax : null,
+      // 角标：覆/拂尘「能用不止一次」时才显示还剩几次
+      badge: sk.showBadge ? (sk.charges != null ? sk.charges : sk.charge) : null,
+      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[seat].indexOf(sk.id) >= 0 : false
     })),
     arm: g.arm[seat] ? g.arm[seat].id : null,   // 已经预选但还没杀成的杀招（平/垂/荒 的 id）
     armEat: g.arm[seat] ? (g.arm[seat].eat || null) : null,   // 荒 吃掉的是哪一支
@@ -199,14 +239,21 @@ function view(r, seat) {
     zone: g.zone,                    // 禁入点：{cells, p, kind, center}
     zoneFx: g.zoneFx.slice(-3),      // 金框特效流水
     fuFx: g.fuFx.slice(-3),          // 覆生效的碎裂流水
-    myFu: g.fu[seat],                // 我覆押下的格（自己看得见，对手看不见）
-    myFuMode: g.fuTarget[seat],      // 'guess' 盲猜 / 'kill' 直接盯上一颗子
-    fuLeft: g.fuOwned[seat] && !g.fuUsed[seat] ? 1 : 0,
+    // v2：覆可以一个暗轮里连押好几格，所以是列表不是单格
+    myFu: g.fuMarks[seat].map((m) => m.cell),
+    myFuModes: g.fuMarks[seat].map((m) => m.mode),
+    fuCharges: g.fuCharges[seat],
+    fuMaxSeen: g.fuMaxSeen[seat],
+    // 复生的绿 ×：只发自己的（对手永远看不见）
+    myGreen: g.greenFu[seat] ? g.greenFu[seat].cell : null,
+    greenFx: g.greenFx.slice(-3),
+    // 寂灭劈雷的流水
+    jimieFx: g.jimieFx.slice(-2),
     // 对手的技能：名字和冷却属于公开信息（打牌看得见对面剩几张），
     // 但介绍不给 —— 想弄明白对面在干什么，得自己从对局里看出来。
     skillsOpp: g.skillsOf(1 - seat).map((sk, k) => ({
       id: sk.id, name: sk.name, wait: g.skillWait(1 - seat, k),
-      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[1 - seat].indexOf(sk.id) >= 0 : (sk.id === 'fu' ? g.fuUsed[1 - seat] : false)
+      used: (sk.id === 'ping' || sk.id === 'chui') ? g.onceUsed[1 - seat].indexOf(sk.id) >= 0 : false
     })),
     rematch: r.rematch.slice()
   };
@@ -217,6 +264,14 @@ function view(r, seat) {
     const own = g.pending.hidden[seat];
     v.cells[own] = seat + 1;
     v.myHidden = own;
+    // 混沌局一次落两子：第二子也一样，只补给自己看。
+    // （之前只补了第一子，于是第二子落下后自己屏幕上什么也没有 —— 和 v10 那个
+    //   「暗轮自己落的子自己也看不见」是同一个坑，这次别只修一半。）
+    if (g.isChaos() && g.pending.hidden2[seat] != null) {
+      const own2 = g.pending.hidden2[seat];
+      v.cells[own2] = seat + 1;
+      v.myHidden2 = own2;
+    }
   }
 
   // 杀 = 落子覆盖：把「能覆盖的敌方老子」的格子告诉前端，让它们可点
@@ -349,6 +404,9 @@ function act(r, seat, a) {
     } else if (g.phase !== 'open-first' || g.first !== seat) {
       return '现在不是你走';
     }
+  } else if (a.type === 'mark') {
+    // v2：竞拍胜者定势。d 只能是 -N / 0 / +N（N = 本轮花掉的气）。
+    try { g.chooseMark(seat, a.d | 0); } catch (e) { return e.message; }
   } else if (a.type === 'give') {
     try { g.giveFirst(seat); } catch (e) {
       const m = e.message;
@@ -371,7 +429,8 @@ function act(r, seat, a) {
         from: a.from == null ? null : (a.from | 0),
         to: a.to == null ? null : (a.to | 0),
         cell: a.cell == null ? null : (a.cell | 0),
-        eat: a.eat || null
+        eat: a.eat || null,
+        dir: a.dir || null
       });
     } catch (e) {
       const m = e.message;
@@ -386,6 +445,8 @@ function act(r, seat, a) {
       if (m === '只能点空格') return '只能点一个空格';
       if (m === '荒要先选吃掉平还是垂') return '荒要先选吃掉平还是垂';
       if (m === '那一支已经用掉了') return '那一支已经用掉了';
+      if (m === '暮礼要先选一个方向') return '暮礼要先选一个方向';
+      if (m === '这格已经押过了') return '这格已经押过了';
       return m;
     }
   } else if (a.type === 'jie') {
@@ -411,10 +472,12 @@ function act(r, seat, a) {
       }
       g.openSecond({ type: 'place', cell: cell });
     } else if (g.phase === 'hidden') {
-      if (g.pending.hidden[seat] != null) return '你已落子';
       if (g.pending.passed[seat]) return '这一轮你已经过了';
+      if (g.pending.hidden[seat] != null && !(g.isChaos() && g.pending.hidden2[seat] == null)) return '你已落子';
       if (g.cells[cell] !== EMPTY) return '这格已经有子了';
-      g.hiddenSubmit(seat, cell);
+      // 混沌局：第一子走 hiddenSubmit，第二子走 hiddenSubmit2
+      if (g.isChaos() && g.pending.hidden[seat] != null) g.hiddenSubmit2(seat, cell);
+      else g.hiddenSubmit(seat, cell);
     } else {
       return '现在不能落子';
     }
@@ -440,7 +503,16 @@ function body(req, cb) {
   let d = '';
   req.on('data', (c) => { d += c; if (d.length > 1e6) req.destroy(); });
   req.on('end', () => {
-    try { cb(null, d ? JSON.parse(d) : {}); } catch (e) { cb(e); }
+    // 注意：只在这里判 JSON 本身。cb 必须放在 try 外面 ——
+    // 否则路由处理里抛的异常会被这里接住，再调一次 cb，全被错报成「bad json」。
+    let parsed;
+    try { parsed = d ? JSON.parse(d) : {}; } catch (e) {
+      if (process.env.JIEHUI_DEBUG_BODY === '1') {
+        try { require('fs').appendFileSync(__dirname + '/_dbg_body.txt', '[' + d.length + '] ' + d.slice(0, 400) + '\n'); } catch (e2) { }
+      }
+      return cb(e);
+    }
+    cb(null, parsed);
   });
 }
 
@@ -508,7 +580,12 @@ const server = http.createServer((req, res) => {
       if (!r) return json(res, 404, { error: '房间不存在' });
       const seat = seatFor(r, String(d.token || ''));
       if (seat < 0) return json(res, 409, { error: '座位无效' });
-      const err = act(r, seat, d.action || {});
+      let err;
+      try { err = act(r, seat, d.action || {}); } catch (e) {
+        // 之前这里没兜住，异常会被 body() 的 try 吞掉、错报成「bad json」，
+        // 真正的原因完全看不见。现在照实报出来。
+        return json(res, 500, { error: '服务端炸了：' + (e && e.message ? e.message : e) });
+      }
       if (err) return json(res, 400, { error: err, view: view(r, seat) });
       json(res, 200, { ok: true, view: view(r, seat) });
     });

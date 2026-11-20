@@ -17,6 +17,9 @@
   'use strict';
 
   var EMPTY = 0, BLACK = 1, WHITE = 2, ASH = 3;
+  // 阴阳子（v2）：第二阶段双撞不再成灰，而是一颗「既是黑也是白」的子。
+  // 双方算连通块都算它、都能靠它产币、都能杀它（收益跟普通杀一样）。
+  var YINYANG = 4;
 
   var DEFAULTS = {
     size: 9,
@@ -48,11 +51,17 @@
     champs: ['wufeng', 'wufeng']
   };
 
-  // 三种模式。进房间先选模式，再选弈士 —— 模式只改「打几轮」和「起手币」。
+  // 三种模式。进房间先选模式，再选弈士。
+  // markStage2：势 > 它 就进第二阶段（棋盘泛红、双撞变阴阳子）。
+  // markLunhui：势 > 它 就触发轮回（清场、势归 0、双方各得一次币）。
+  // jingLimit：这个模式每人最多买几本经。
   var MODES = [
-    { id: 'quick', name: '极简', rounds: 5, coins: null, desc: '5 轮就打完。试手感、试新东西用这个。' },
-    { id: 'standard', name: '标准', rounds: 20, coins: null, desc: '20 轮。正经一局。' },
-    { id: 'rich', name: '富翁', rounds: 10, coins: 99, desc: '10 轮，双方起手 99 币。盾和道具随便买，纯爽。' }
+    { id: 'quick', name: '极简', rounds: 5, coins: null, markStage2: 10, markLunhui: 20, jingLimit: 1,
+      desc: '5 轮就打完。试手感、试新东西用这个。' },
+    { id: 'standard', name: '标准', rounds: 20, coins: null, markStage2: 10, markLunhui: 20, jingLimit: 1,
+      desc: '20 轮。正经一局。' },
+    { id: 'rich', name: '混沌', rounds: 10, coins: 99, markStage2: 5, markLunhui: 10, jingLimit: 3,
+      desc: '10 轮，双方起手 99 币。没有盾，暗轮一次暗选两子。纯爽。' }
   ];
   function modeOf(id) {
     for (var i = 0; i < MODES.length; i++) if (MODES[i].id === id) return MODES[i];
@@ -62,11 +71,15 @@
   // 弈士。平衡靠起手币与气上限，不改数值。
   // skills[].when：'open' 明轮轮到自己落子之前发动 / 'hidden' 暗轮里发动。
   // skills[].cd：冷却轮数，明轮暗轮都算一轮。用掉的那一轮不扣，往后每轮结束扣 1。
+  // skills[].stage2：只在第二阶段可用（v2）。
   var CHAMPIONS = [
     {
       id: 'wufeng', name: '无锋', tag: '', coins: 2, qiCap: 5,
-      skills: [],
-      desc: '没有任何技能。纯靠手上的子说话。'
+      skills: [{
+        id: 'jimie', name: '寂灭', cd: 0, when: 'open', once: true, stage2: true, qi: 0,
+        desc: '第二阶段才能用，本局一次：明轮里轮到你落子之前发动，耗尽全部币和气（0 币 0 气也能放），三道神雷各劈棋盘随机一格，劈中的东西直接变空白 —— 劫灰、带盾的子、自己的子、对方的子、阴阳子、连角落都可能。势不因此改变。'
+      }],
+      desc: '一把无锋的刀，用不上。'
     },
     {
       id: 'guaiseng', name: '怪僧', tag: '', coins: 2, qiCap: 5,
@@ -81,6 +94,9 @@
       skills: [{
         id: 'tuna', name: '吐纳', cd: 2, when: 'hidden',
         desc: '暗轮里发动：气 +1。冷却 2 轮（明暗都算）。'
+      }, {
+        id: 'fusheng', name: '复生', cd: 0, when: 'hidden', once: true, stage2: true, qi: 0,
+        desc: '第二阶段才能用，本局一次：暗轮里发动，气上限 +1 并立刻回 2 点气；同时点一格空白处挂个绿 ×（只有自己看得见），那格自己不能落。对方要是落在上面，那颗子立刻变成你的（当轮保护还在）。绿 × 再顶一轮，到期没人踩就散了。'
       }],
       desc: '吐一口浊气，多一分底气。'
     },
@@ -101,6 +117,10 @@
         {
           id: 'huang', name: '荒', cd: 0, when: 'open', once: false, qi: 4,
           desc: '平或垂的替代：清空全部气（至少 4 点），把新灰周围三乘三全封成禁入点。不单独计次，用掉一次平或垂。'
+        },
+        {
+          id: 'muli', name: '暮礼', cd: 0, when: 'open', once: false, stage2: true, qi: 0,
+          desc: '平和垂都用光、并且进了第二阶段，才轮到它。明轮先手落子前发动（不耗气），声明上 / 下 / 左 / 右一个方向：这一手如果杀成了，以新灰为中心朝那个方向封一格给对手禁入。每轮最多一次，不触发不消耗。'
         }
       ],
       desc: '一笔落定，划地为界。'
@@ -149,9 +169,11 @@
 
   function blobsSizes(cells, size, p) {
     var n = size * size, want = p + 1;
+    // 阴阳子「既是黑也是白」：算连通块时双方都把它当自己的子（v2）。
+    function mine(v) { return v === want || v === YINYANG; }
     var vis = new Uint8Array(n), stack = new Int32Array(n), out = [];
     for (var i = 0; i < n; i++) {
-      if (cells[i] !== want || vis[i]) continue;
+      if (!mine(cells[i]) || vis[i]) continue;
       var sp = 0; stack[sp++] = i; vis[i] = 1;
       var sz = 0;
       while (sp) {
@@ -159,7 +181,7 @@
         var nb = nbrs(size, c);
         for (var k = 0; k < nb.length; k++) {
           var j = nb[k];
-          if (!vis[j] && cells[j] === want) { vis[j] = 1; stack[sp++] = j; }
+          if (!vis[j] && mine(cells[j])) { vis[j] = 1; stack[sp++] = j; }
         }
       }
       out.push(sz);
@@ -171,10 +193,11 @@
   // 最大连通块具体是哪些格子。并列时只取最先扫到的那一块（结算特效要用）。
   function blobCellsLargest(cells, size, p) {
     var n = size * size, want = p + 1;
+    function mine(v) { return v === want || v === YINYANG; }
     var vis = new Uint8Array(n), stack = new Int32Array(n);
     var best = [], bestSize = 0;
     for (var i = 0; i < n; i++) {
-      if (cells[i] !== want || vis[i]) continue;
+      if (!mine(cells[i]) || vis[i]) continue;
       var sp = 0; stack[sp++] = i; vis[i] = 1;
       var cur = [];
       while (sp) {
@@ -182,7 +205,7 @@
         var nb = nbrs(size, c);
         for (var k = 0; k < nb.length; k++) {
           var j = nb[k];
-          if (!vis[j] && cells[j] === want) { vis[j] = 1; stack[sp++] = j; }
+          if (!vis[j] && mine(cells[j])) { vis[j] = 1; stack[sp++] = j; }
         }
       }
       if (cur.length > bestSize) { bestSize = cur.length; best = cur; }
@@ -234,6 +257,37 @@
     this.round = 1;
     this.roundMode = 'pending';   // 'pending'（竞拍中，结果未定）| 'open' | 'hidden'
     this.ashCount = 0;
+    // ── 势（v2）────────────────────────────────────────────
+    // 杀成灰 +1、暗轮双撞 +1、混沌局双撞 +2。跟劫灰数量彻底解耦：
+    // 灰被拂尘挪走、被寂灭劈掉、被轮回清空，势都不会跟着少。
+    this.mark = 0;
+    this.markSeq = 0;
+    this.markLog = [];             // 势的变化流水 {id, d, why, mark}
+    this.lunhuiCount = 0;
+    this.lunhuiSeq = 0;
+    this.lunhuiFx = [];            // 轮回特效流水 {id, mark0, coins}
+    // 夺完之后胜者必须先调势（−N / 0 / +N）才能落子，N = 本轮实际花掉的气。
+    this.markN = 0;
+    this.markDone = [true, true];
+    // 5×5 框：先手这一手定下的框，只约束后手这一手。
+    this.frame = null;
+    // 拂尘升级：触发过轮回之后才有充能（上限 3），null = 还没升级。
+    this.fuchenCharge = [null, null];
+    // 拂尘充能的冷却：攒满 3 轮才多 1 点（明轮暗轮都在走）。
+    this.fuchenCd = [0, 0];
+    // 复生：绿 × {cell, roundsLeft}，只自己可见、只禁自己。
+    this.greenFu = [null, null];
+    this.greenSeq = 0;
+    this.greenFx = [];             // 绿 × 命中变子的流水 {id, cell, p}
+    // 覆：一个暗轮里可以连押好几格（v2）。
+    this.fuMarks = [[], []];       // 待结算的押注 [{cell, mode}]
+    this.fuCharges = [0, 0];       // 读了几本经 = 还能押几次
+    this.fuMaxSeen = [0, 0];       // 曾经拥有过几次（决定角标显不显示）
+    this.muliUsedRound = [0, 0];   // 暮礼：这一轮是否已经用过（存轮次号）
+    this.jimieUsed = [false, false];
+    this.fushengUsed = [false, false];
+    this.jimieSeq = 0;
+    this.jimieFx = [];             // 寂灭三雷的流水 {id, cells, p}
     this.killCount = [0, 0];   // 明轮：落子盖掉对手一子 = 「杀」
     this.jieCount = [0, 0];    // 兼容旧字段，v9 起不再自增
     this.jieTotal = 0;         // 暗轮两人撞在同一格 = 「劫」（无妄之灾，不算谁的）
@@ -251,7 +305,7 @@
     this.tieRaise = [null, null];
     this.first = null;
     this.gaveFirst = false;    // 本轮先手是否已经把先动让出去了
-    this.pending = { openFirst: null, hidden: [null, null], passed: [false, false] };
+    this.pending = { openFirst: null, hidden: [null, null], hidden2: [null, null], passed: [false, false] };
     this.items = [[], []];
     // 技能冷却：skillCdUntil[p][k] = 到第几轮才能再用（round >= 它才行）。
     // 用绝对轮次而不是倒计时，是因为明轮、暗轮同属一轮，「明暗都计数」就是按轮数走。
@@ -272,14 +326,12 @@
     this.zone = [];            // 禁入点 [{cells:[...], p, kind, center}] —— p 设的，封的是对手
     this.zoneSeq = 0;
     this.zoneFx = [];          // 金框特效流水 {id, cells, kind}
-    this.arm = [null, null];   // 明轮先手预选的杀招：'ping' | 'chui' | 'huang' | null
+    this.arm = [null, null];   // 明轮先手预选的杀招：'ping' | 'chui' | 'huang' | 'muli' | null
     this.onceUsed = [[], []];  // once 类技能已用过的 id 列表（平 / 垂各一次）
-    this.fu = [null, null];    // 覆：押下的那一格（盲猜空格 / 直接盖对方的子），暗轮结算时才见分晓
-    this.fuTarget = [null, null];  // 覆押的是对方哪颗子（直接抹除时才有值），只用来画 × 的位置
-    this.fuUsed = [false, false];
-    this.fuOwned = [false, false];   // 读过经才有「覆」这个技能
+    // 覆（v2）：一个暗轮里可以连押好几格，押注放着等暗轮结算。
+    this.fuList = [[], []];    // 盘面上挂着的红 ×（只自己可见），给前端画
     this.fuSeq = 0;
-    this.fuFx = [];            // 覆生效时的碎裂特效流水 {id, cell, p}
+    this.fuFx = [];            // 覆生效时的碎裂特效流水 {id, cell, p, color}
     this.danBought = [0, 0];
     this.jingBought = [0, 0];
     this.phase = 'auction';
@@ -310,6 +362,130 @@
       var r = [];
       for (var i = 0; i < this.cells.length; i++) if (this.cells[i] === EMPTY) r.push(i);
       return r;
+    },
+
+    // ── 势 / 阶段（v2）──────────────────────────────────────
+    stage: function () {
+      var md = modeOf(this.o.mode);
+      return this.mark > md.markStage2 ? 2 : 1;
+    },
+    inStage2: function () { return this.stage() === 2; },
+    markMax: function () { return modeOf(this.o.mode).markLunhui; },
+    _gainMark: function (n, why) {
+      if (!n) return this.mark;
+      var before = this.mark;
+      this.mark += n;
+      if (this.mark < 0) this.mark = 0;          // 势最低 0
+      this.markSeq++;
+      this.markLog.push({ id: this.markSeq, d: this.mark - before, why: why || '', mark: this.mark });
+      return this.mark;
+    },
+    // 重新数一遍盘上的劫灰（寂灭、轮回会清灰，ashCount 得跟着对）。
+    _recountAsh: function () {
+      var n = 0;
+      for (var i = 0; i < this.cells.length; i++) if (this.cells[i] === ASH) n++;
+      this.ashCount = n;
+      return n;
+    },
+
+    // ── 轮回（v2）─────────────────────────────────────────
+    // 势越过上限 → 立刻结算：清灰、清阴阳子、解禁入、双方各按最大块得一次币、势归 0。
+    _tryLunhui: function () {
+      if (this.mark <= this.markMax()) return false;
+      var before = this.mark;
+      // 得币用的是「清灰之前」的盘面
+      var big = [this.score(0), this.score(1)];
+      this.lunhuiCount++;
+      this.lunhuiSeq++;
+      // 清场前的盘面快照：前端要靠它把「灰和阴阳子还在」的样子画出来，
+      // 再让碧波自上而下扫过去一层层抹掉（用户 m06298 要求别一下全没了）。
+      this.lunhuiFx.push({
+        id: this.lunhuiSeq, mark0: before, coins: big.slice(),
+        board: this.cells.slice()
+      });
+      // 清场：灰、阴阳子全部消失，回到空白
+      for (var i = 0; i < this.cells.length; i++) {
+        if (this.cells[i] === ASH || this.cells[i] === YINYANG) {
+          this.cells[i] = EMPTY;
+          this.placedAt[i] = 0;
+        }
+      }
+      this._recountAsh();
+      this.zone = [];
+      // 注意：这里**不要**清 5×5 框。先手杀成灰 → 以新灰为中心设框 → 势刚好越线
+      // 在这里触发轮回。如果顺手把框清了，后手这一手就没有框了，
+      // 界面上的绿框折角也会跟着消失（用户 m06750 报的就是这个）。
+      // 双方各按自己当前最大连通块得一次币（跟明轮结算一模一样）
+      if (this.o.coinFromBlob) {
+        this.coins[0] += big[0];
+        this.coins[1] += big[1];
+        this.lastIncome = big.slice();
+        this.incomeSeq++;
+        this.incomeFx.push({
+          id: this.incomeSeq,
+          cells: [blobCellsLargest(this.cells, this.size, 0), blobCellsLargest(this.cells, this.size, 1)],
+          coins: big.slice()
+        });
+      }
+      this.mark = 0;
+      // 拂尘升级：触发过轮回的怪僧，充能上限 3，此刻充到 2
+      for (var p = 0; p < 2; p++) {
+        var src = this.champ[p].skills || [];
+        for (var s = 0; s < src.length; s++) {
+          if (src[s].id === 'fuchen') {
+            this.fuchenCharge[p] = 2;
+            this.fuchenCd[p] = 3;      // 之后每 3 轮才再涨 1 点
+          }
+        }
+      }
+      this._flash('lunhui');
+      this.roundLog.push({ t: 'lunhui', mark0: before, coins: big });
+      return true;
+    },
+
+    // ── 5×5 框（v2）────────────────────────────────────────
+    // 竞拍胜者自己先落子 / 先杀成灰 → 以那一格为中心圈 5×5，
+    // 后手这一手只能框里落空格、或者框里杀敌子（杀也受限）。
+    // 胜者点了让先 → 这一轮不设框。技能不受框限制。
+    _setFrame: function (center) {
+      var s = this.size, x = center % s, y = (center / s) | 0;
+      this.frame = {
+        center: center,
+        r0: Math.max(0, y - 2), r1: Math.min(s - 1, y + 2),
+        c0: Math.max(0, x - 2), c1: Math.min(s - 1, x + 2)
+      };
+      return this.frame;
+    },
+    inFrame: function (cell) {
+      if (!this.frame) return true;
+      var s = this.size, x = cell % s, y = (cell / s) | 0, f = this.frame;
+      return y >= f.r0 && y <= f.r1 && x >= f.c0 && x <= f.c1;
+    },
+    frameCells: function () {
+      var out = [];
+      if (!this.frame) return out;
+      var s = this.size, f = this.frame;
+      for (var y = f.r0; y <= f.r1; y++) for (var x = f.c0; x <= f.c1; x++) out.push(y * s + x);
+      return out;
+    },
+    // 框只约束「后手这一手」。
+    _frameRestricts: function (p) {
+      if (!this.frame) return false;
+      if (this.phase !== 'open-second') return false;
+      return p === 1 - this.first;
+    },
+    // 兜底：框里既没有空格、也没有可杀的敌子 → 后手可以全盘自由落子。
+    // 只判空格是不够的：框被塞满但里面还站着一颗能杀的敌子，后手照样有事可做，
+    // 这时候放开全盘等于 5×5 直接作废（用户 m05919 认定是 bug）。
+    _frameDead: function () {
+      if (!this.frame) return true;
+      var fc = this.frameCells();
+      var p = 1 - this.first;
+      for (var i = 0; i < fc.length; i++) {
+        if (this.cells[fc[i]] === EMPTY) return false;
+        if (this.isKillTarget(fc[i], p)) return false;
+      }
+      return true;
     },
 
     // 阶段切换流水：'start'（开局）/ 'duo'（进竞拍）/ 'ming'（进明轮）/ 'an'（进暗轮）。
@@ -409,9 +585,29 @@
       // 不再有单独的「选先后手」阶段：赢家直接就是先手，界面上给他一个
       // 「让对方先走」的按钮（giveFirst），想后动再点它。
       this.first = w;
+      // v2：胜者必须先定势（−N / 0 / +N，N = 本轮实际花掉的气）才能落子。
+      this.markN = price;
+      this.markDone = [true, true];
+      this.markDone[w] = false;   // 只有胜者有权调势
       this.phase = 'open-first';
       this._flash('ming');
-      return { won: w, price: price, first: this.first };
+      return { won: w, price: price, first: this.first, markN: price };
+    },
+
+    // 胜者定势：d 只能是 -N / 0 / +N（N = 本轮实际花掉的气）。
+    // 势最低 0；往上越过轮回线就地触发轮回。
+    chooseMark: function (p, d) {
+      if (this.phase !== 'open-first') throw new Error('phase:' + this.phase);
+      if (this.first !== p) throw new Error('not your turn');
+      if (this.markDone[p]) throw new Error('已经定过了');
+      d = d | 0;
+      var N = this.markN;
+      if (d !== 0 && d !== N && d !== -N) throw new Error('只能 -' + N + ' / 0 / +' + N);
+      this.markDone[p] = true;
+      this.roundLog.push({ t: 'mark', p: p, d: d });
+      if (d) this._gainMark(d, 'choose');
+      if (d > 0) this._tryLunhui();
+      return this.mark;
     },
 
     // 没人抢下先手：本轮直接打暗轮（不是取消暗轮 —— 暗轮打完照样回竞拍）
@@ -422,19 +618,23 @@
       this.first = null;
       this.phase = 'hidden';
       this.pending.hidden = [null, null];
+      this.pending.hidden2 = [null, null];
       this.pending.passed = [false, false];
       this._flash('an');
       return { hidden: true };
     },
 
     // 先手把「先动」让给对手（原来靠选序，现在靠这个按钮）。
+    // v2：必须先定势才能让先（势的处置权永远在竞拍胜者手里）。
     giveFirst: function (p) {
       if (this.phase !== 'open-first') throw new Error('phase:' + this.phase);
       if (this.first !== p) throw new Error('not your turn');
+      if (!this.markDone[p]) throw new Error('先定势');
       if (this.pending.openFirst != null) throw new Error('already placed');
       if (this.gaveFirst) throw new Error('已经让过了');
       this.gaveFirst = true;
       this.first = 1 - p;
+      this.frame = null;          // 让先 → 这一轮不设 5×5 框
       this.roundLog.push({ t: 'give', p: p });
       return this.first;
     },
@@ -466,9 +666,13 @@
     // ── 正辩：禁入点 ────────────────────────────────────────
     // 封的是「设禁入点那一方的对手」；明轮结束就解封。
     isForbidden: function (cell, p) {
-      // 覆 押下的那一格：只有自己不能落（自己的禁入点），防止自己撞自己出 bug。
-      // 对面落进去照旧 —— 猜中/盯上都会碎。
-      if (this.fu[p] != null && this.fu[p] === cell) return true;
+      // 覆 押下的那几格：只有自己不能落（自己的禁入点），防止自己撞自己出 bug。
+      // 对面落进去照旧 —— 猜中/盯上都会碎。一个暗轮里可以押好几格。
+      for (var fi = 0; fi < this.fuMarks[p].length; fi++) {
+        if (this.fuMarks[p][fi].cell === cell) return true;
+      }
+      // 复生的绿 ×：只禁自己，不禁对方（否则对方永远撞不上）。
+      if (this.greenFu[p] && this.greenFu[p].cell === cell) return true;
       for (var i = 0; i < this.zone.length; i++) {
         var z = this.zone[i];
         if (z.p === p) continue;                       // 自己设的自己能落
@@ -481,8 +685,8 @@
       for (var i = 0; i < this.zone.length; i++) if (this.zone[i].p === p) out = out.concat(this.zone[i].cells);
       return out;
     },
-    // 平 = 中心左右三格 / 垂 = 中心上下三格 / 荒 = 中心 3×3
-    _zoneCells: function (center, kind) {
+    // 平 = 中心左右三格 / 垂 = 中心上下三格 / 荒 = 中心 3×3 / 暮礼 = 中心朝 dir 一格
+    _zoneCells: function (center, kind, dir) {
       var s = this.size, x = center % s, y = (center / s) | 0, out = [];
       function add(nx, ny) {
         if (nx < 0 || ny < 0 || nx >= s || ny >= s) return;
@@ -490,20 +694,30 @@
       }
       if (kind === 'ping') { add(x - 1, y); add(x, y); add(x + 1, y); }
       else if (kind === 'chui') { add(x, y - 1); add(x, y); add(x, y + 1); }
+      else if (kind === 'muli') {
+        if (dir === 'up') add(x, y - 1);
+        else if (dir === 'down') add(x, y + 1);
+        else if (dir === 'left') add(x - 1, y);
+        else if (dir === 'right') add(x + 1, y);
+        // 贴边：出界就是空的 —— 技能照用、没作用
+      }
       else {
         for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) add(x + dx, y + dy);
       }
       return out;
     },
-    _openZone: function (p, center, kind) {
-      var cells = this._zoneCells(center, kind);
-      this.zone.push({ cells: cells, p: p, kind: kind, center: center });
-      this.zoneSeq++;
-      this.zoneFx.push({ id: this.zoneSeq, cells: cells, kind: kind, center: center, p: p });
-      this.roundLog.push({ t: 'zone', p: p, kind: kind, cells: cells });
+    _openZone: function (p, center, kind, dir) {
+      var cells = this._zoneCells(center, kind, dir);
+      // 出界后可能是空数组（暮礼贴边）：空禁入点没意义，不记录，但技能算用掉。
+      if (cells.length) {
+        this.zone.push({ cells: cells, p: p, kind: kind, center: center, dir: dir || null });
+        this.zoneSeq++;
+        this.zoneFx.push({ id: this.zoneSeq, cells: cells, kind: kind, center: center, p: p, dir: dir || null });
+        this.roundLog.push({ t: 'zone', p: p, kind: kind, cells: cells, dir: dir || null });
+      }
       return cells;
     },
-    // 杀成之后兑现预选的杀招（平 / 垂 / 荒）。没预选就什么也不做。
+    // 杀成之后兑现预选的杀招（平 / 垂 / 荒 / 暮礼）。没预选就什么也不做。
     _settleArm: function (p, ashCell) {
       var a = this.arm[p];
       if (!a) return null;
@@ -525,7 +739,8 @@
         }
         if (spare) this.onceUsed[p].push(spare);
       }
-      return this._openZone(p, ashCell, a.id);
+      if (a.id === 'muli') this.muliUsedRound[p] = this.round;
+      return this._openZone(p, ashCell, a.id, a.dir || null);
     },
 
     // ── 杀：落子覆盖敌方不受保护的子，那格成灰 ──────────────
@@ -541,7 +756,14 @@
     },
     isKillTarget: function (cell, byP) {
       var owner = 1 - byP;
-      if (this.cells[cell] !== owner + 1) return false;
+      var v = this.cells[cell];
+      // 阴阳子谁都能杀，而且不受「老子」保护（当轮刚生成的也能杀）。
+      if (v === YINYANG) {
+        if (this.isShielded(cell)) return false;
+        if (this.isForbidden(cell, byP)) return false;
+        return true;
+      }
+      if (v !== owner + 1) return false;
       if (!(this.placedAt[cell] > 0 && this.placedAt[cell] < this.round)) return false;
       if (this.isShielded(cell)) return false;   // 有盾就杀不动
       if (this.isForbidden(cell, byP)) return false;  // 禁入点里杀也失效
@@ -569,6 +791,17 @@
       // 特效流水：前端只看 fx 里比自己见过的序号更新的事件
       this.fxSeq++;
       this.fx.push({ id: this.fxSeq, cell: cell, kind: kind || 'jie' });
+      // v2：成灰 → 势 +1（混沌局双撞要 +2，由调用方另补差额）
+      this._gainMark(1, kind || 'jie');
+    },
+
+    // 第二阶段的双撞：不变灰，变一颗阴阳子（既是黑也是白）。
+    _makeYinyang: function (cell) {
+      this.cells[cell] = YINYANG;
+      this.placedAt[cell] = 0;
+      this.fxSeq++;
+      this.fx.push({ id: this.fxSeq, cell: cell, kind: 'yinyang' });
+      this._gainMark(1, 'yinyang');
     },
 
     // ── 落子 ──────────────────────────────────────────────
@@ -576,24 +809,40 @@
     openPlaceFirst: function (cell) {
       if (this.phase !== 'open-first') throw new Error('phase:' + this.phase);
       var p = this.first;
+      // v2：夺完之后胜者必须先定势，才能落子 / 让先。
+      if (!this.markDone[p]) throw new Error('先定势');
       if (this.isKillTarget(cell, p)) {
         this._makeAsh(cell, 'kill');
         this.killCount[p]++;
         this._gainQi(p, this.o.killQi);
         this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: 1 - p });
-        // 杀成了 → 兑现预选的杀招（平 / 垂 / 荒），划出禁入点
+        // v2：先手这一手是杀 → 5×5 框以「被烧成灰那格」为中心
+        this._setFrame(cell);
+        // 杀成了 → 兑现预选的杀招（平 / 垂 / 荒 / 暮礼），划出禁入点
         this._settleArm(p, cell);
         // 这一手没落子（把对方的子烧了），所以没有「这一手」可以贴 ——
         // 后手因此不受贴点约束，anchors() 返回空数组即视作自由落子。
         this.pending.openFirst = null;
         this.phase = 'open-second';
+        // 势可能被这一杀推过轮回线 → 立刻结算，后手照常落
+        this._tryLunhui();
         return cell;
       }
       if (this.isForbidden(cell, p)) throw new Error('那是禁入点');
       if (this.cells[cell] !== EMPTY) throw new Error('occupied');
+      // 踩中对方的绿 ×：这格直接被对方抢走，自己这一手算白下（没落子）。
+      if (this._greenFuOpen(cell, p)) {
+        this._setFrame(cell);
+        this.pending.openFirst = null;
+        this.phase = 'open-second';
+        this._tryLunhui();
+        return cell;
+      }
       this.cells[cell] = p + 1;
       this.placedAt[cell] = this.round;
       this.pending.openFirst = cell;
+      // v2：先手自己落子 → 5×5 框以这格为中心
+      this._setFrame(cell);
       this.roundLog.push({ t: 'place', p: p, cell: cell, mode: 'open' });
       this.phase = 'open-second';
       return cell;
@@ -601,12 +850,17 @@
 
     // 明轮后手合法落点：贴对手这一手 ∪ 贴自己的子；再加上所有可杀的敌子格
     // anchorRule 关掉时返回全部空格（想落哪就落哪）。
+    // v2：先手这一手定下的 5×5 框只约束后手这一手（框里没空格了才放开全盘）。
     anchors: function (p) {
       if (p == null) p = 1 - this.first;
+      var useFrame = this._frameRestricts(p) && !this._frameDead();
       if (!this.o.anchorRule) {
         var all = [];
         for (var i = 0; i < this.cells.length; i++) {
-          if (this.cells[i] === EMPTY && !this.isForbidden(i, p)) all.push(i);
+          if (this.cells[i] !== EMPTY) continue;
+          if (this.isForbidden(i, p)) continue;
+          if (useFrame && !this.inFrame(i)) continue;
+          all.push(i);
         }
         return all;
       }
@@ -632,13 +886,16 @@
           }
         }
       }
+      if (useFrame) out = out.filter(this.inFrame, this);
       return out;
     },
 
     // 后手能点的所有格子：贴点里的空格 + 可杀的敌子格（杀不受贴约束）
+    // v2：框生效时，杀也只能在框里杀。
     secondOptions: function () {
       var p = 1 - this.first;
       var a = this.anchors(p), j = this.killTargetsFor(p);
+      if (this._frameRestricts(p) && !this._frameDead()) j = j.filter(this.inFrame, this);
       return a.concat(j);
     },
 
@@ -647,19 +904,25 @@
       if (typeof action === 'number') action = { cell: action };   // 容错：也接受直接传格号
       var p = 1 - this.first;
       var cell = action.cell;
+      var frameOn = this._frameRestricts(p) && !this._frameDead();
       if (this.isKillTarget(cell, p)) {
+        if (frameOn && !this.inFrame(cell)) throw new Error('只能在框里');
         this._makeAsh(cell, 'kill');
         this.killCount[p]++;
         this._gainQi(p, this.o.killQi);
         this.roundLog.push({ t: 'kill', p: p, cell: cell, victim: this.first });
         this._settleArm(p, cell);
+        this._tryLunhui();
         return this._endRound();
       }
       if (this.isForbidden(cell, p)) throw new Error('那是禁入点');
+      if (frameOn && !this.inFrame(cell)) throw new Error('只能在框里');
       var anchors = this.anchors(p);
       var free = anchors.length === 0;
       if (!free && anchors.indexOf(cell) === -1) throw new Error('must anchor');
       if (this.cells[cell] !== EMPTY) throw new Error('occupied');
+      // 踩中对方的绿 ×：这格被对方抢走，自己这一手算白下，这一轮照常结束。
+      if (this._greenFuOpen(cell, p)) return this._endRound();
       this.cells[cell] = p + 1;
       this.placedAt[cell] = this.round;
       this.roundLog.push({ t: 'place', p: p, cell: cell, mode: 'open', free: free });
@@ -667,6 +930,7 @@
     },
 
     // ── 暗轮 ──────────────────────────────────────────────
+    // 混沌局每方要暗选两子（hiddenSubmit2），其他模式一子。
     hiddenSubmit: function (p, cell) {
       if (this.phase !== 'hidden') throw new Error('phase:' + this.phase);
       if (this.cells[cell] !== EMPTY) throw new Error('occupied');
@@ -674,7 +938,31 @@
       if (this.isForbidden(cell, p)) throw new Error('那是禁入点');
       if (this.pending.hidden[p] != null || this.pending.passed[p]) throw new Error('already submitted');
       this.pending.hidden[p] = cell;
+      // 混沌局：第一子先存着，等第二子一起提交。
+      if (this.isChaos()) return null;
       return this._resolveHidden();
+    },
+
+    // 混沌局第二子：两子都落定才算这一方提交完。
+    hiddenSubmit2: function (p, cell) {
+      if (this.phase !== 'hidden') throw new Error('phase:' + this.phase);
+      if (!this.isChaos()) throw new Error('这个模式只落一子');
+      if (this.pending.hidden[p] == null) throw new Error('先选第一子');
+      if (this.pending.hidden2[p] != null) throw new Error('already submitted');
+      if (cell === this.pending.hidden[p]) throw new Error('两子不能同一格');
+      if (this.cells[cell] !== EMPTY) throw new Error('occupied');
+      if (this.isForbidden(cell, p)) throw new Error('那是禁入点');
+      this.pending.hidden2[p] = cell;
+      return this._resolveHidden();
+    },
+
+    isChaos: function () { return this.o.mode === 'rich'; },
+    // 这一方暗轮是否已经交完（普通模式一子，混沌两子）。
+    hiddenDone: function (p) {
+      if (this.pending.passed[p]) return true;
+      if (this.pending.hidden[p] == null) return false;
+      if (this.isChaos() && this.pending.hidden2[p] == null) return false;
+      return true;
     },
 
     // 暗轮也能「过」：这一轮不落子。两人都过 → 这一轮空着过去。
@@ -688,61 +976,153 @@
     },
 
     _resolveHidden: function () {
-      var aPending = this.pending.hidden[0] != null || this.pending.passed[0];
-      var bPending = this.pending.hidden[1] != null || this.pending.passed[1];
-      if (!aPending || !bPending) return null;
+      if (!this.hiddenDone(0) || !this.hiddenDone(1)) return null;
+      var chaos = this.isChaos();
+      // 每方这一手落的格子（混沌局两个；被覆打掉的置 null）
       var a = this.pending.hidden[0], b = this.pending.hidden[1];
-      // 覆：暗轮结算。两种用法都在这一刻见分晓。
+      var a2 = chaos ? this.pending.hidden2[0] : null;
+      var b2 = chaos ? this.pending.hidden2[1] : null;
+
+      // ── 覆：一个暗轮能押好几格，逐格兑现。 ──
       //  'guess'：盲猜对方这一手落在哪 → 猜中那子当场碎掉（连盾），猜空就白花。
       //  'kill' ：直接盯上对方一颗子 → 不论对方这手落在哪，那子都碎（连盾）。
       for (var fp = 0; fp < 2; fp++) {
-        var guess = this.fu[fp];
-        if (guess == null) continue;
-        var mode = this.fuTarget[fp];
-        this.fu[fp] = null;
-        this.fuTarget[fp] = null;
-        var opCell = this.pending.hidden[1 - fp];
-        var hit = (mode === 'kill') || (opCell != null && opCell === guess);
-        if (hit) {
-          // 碎掉对方那一手 / 那一颗子
-          var victimColor = this.cells[guess];   // 先记下颜色，下面就把格子清空了
-          if (opCell === guess) { if (fp === 0) b = null; else a = null; }
-          if (this.cells[guess] === (1 - fp) + 1) {
-            this.cells[guess] = EMPTY;
-            this.placedAt[guess] = 0;
+        var marks = this.fuMarks[fp];
+        if (!marks.length) continue;
+        this.fuMarks[fp] = [];
+        this.fuList[fp] = [];
+        var opCells = chaos ? [this.pending.hidden[1 - fp], this.pending.hidden2[1 - fp]]
+                            : [this.pending.hidden[1 - fp]];
+        for (var mi = 0; mi < marks.length; mi++) {
+          var guess = marks[mi].cell, mode = marks[mi].mode;
+          var opHit = false;
+          for (var oi = 0; oi < opCells.length; oi++) if (opCells[oi] != null && opCells[oi] === guess) opHit = true;
+          var hit = (mode === 'kill') || opHit;
+          if (hit) {
+            var victimColor = this.cells[guess];   // 先记下颜色，下面就把格子清空了
+            // 打掉的是这一手落的子：从 pending 里剔除（fp 是押注方，被打的是对手那一手）
+            if (fp === 0) { if (b === guess) b = null; if (b2 === guess) b2 = null; }
+            else { if (a === guess) a = null; if (a2 === guess) a2 = null; }
+            if (this.cells[guess] === (1 - fp) + 1) {
+              this.cells[guess] = EMPTY;
+              this.placedAt[guess] = 0;
+            }
+            // 有盾也一起打掉
+            for (var si = this.shields.length - 1; si >= 0; si--) {
+              if (this.shields[si].cell === guess) this.shields.splice(si, 1);
+            }
+            this.fuSeq++;
+            // 记下被碎掉那颗子的颜色（1=黑 2=白），前端照着同色碎，别一律按黑子画
+            this.fuFx.push({ id: this.fuSeq, cell: guess, p: fp, color: victimColor });
+            this.roundLog.push({ t: 'fu', p: fp, cell: guess, hit: true, mode: mode });
+          } else {
+            this.roundLog.push({ t: 'fu', p: fp, cell: guess, hit: false, mode: mode });
           }
-          // 有盾也一起打掉
-          for (var si = this.shields.length - 1; si >= 0; si--) {
-            if (this.shields[si].cell === guess) this.shields.splice(si, 1);
-          }
-          this.fuSeq++;
-          // 记下被碎掉那颗子的颜色（1=黑 2=白），前端照着同色碎，别一律按黑子画
-          this.fuFx.push({ id: this.fuSeq, cell: guess, p: fp, color: victimColor });
-          this.roundLog.push({ t: 'fu', p: fp, cell: guess, hit: true, mode: mode });
-        } else {
-          this.roundLog.push({ t: 'fu', p: fp, cell: guess, hit: false, mode: mode });
         }
       }
-      if (a != null && b != null && a === b) {
-        // 暗轮两人撞在同一格 = 「劫」，无妄之灾，两边都没得着，所以不记给谁
-        this._makeAsh(a, 'jie');
-        this.jieTotal++;
-        this.roundLog.push({ t: 'jie', cell: a });
-      } else {
-        if (a != null) {
-          this.cells[a] = BLACK;
-          this.placedAt[a] = this.round;
-          this.roundLog.push({ t: 'place', p: 0, cell: a, mode: 'hidden' });
+
+      // ── 双撞判定 ──
+      // 普通模式：两人同格 → 劫。第二阶段变阴阳子，否则成灰。
+      // 混沌局：两两比对，撞几格都算，但整轮只 +2（用户 m04661）。
+      var mine0 = [a, a2].filter(function (v) { return v != null; });
+      var mine1 = [b, b2].filter(function (v) { return v != null; });
+      var collisions = [];
+      for (var i0 = 0; i0 < mine0.length; i0++) {
+        if (mine1.indexOf(mine0[i0]) >= 0) collisions.push(mine0[i0]);
+      }
+      if (collisions.length) {
+        var stage2 = this.inStage2();
+        for (var ci = 0; ci < collisions.length; ci++) {
+          var ccell = collisions[ci];
+          if (stage2) this._makeYinyang(ccell);   // 阴阳子不产生劫灰
+          else this._makeAsh(ccell, 'jie');
+          this.jieTotal++;
+          this.roundLog.push({ t: 'jie', cell: ccell, yinyang: stage2 });
         }
-        if (b != null) {
-          this.cells[b] = WHITE;
-          this.placedAt[b] = this.round;
-          this.roundLog.push({ t: 'place', p: 1, cell: b, mode: 'hidden' });
+        // 混沌局整轮只 +2：撞 1 格 → 补 +1；撞 2 格 → 各已 +1，正好 +2，不补。
+        if (chaos) {
+          var extra = 2 - collisions.length;
+          if (extra > 0) this._gainMark(extra, 'chaos-jie');
+        }
+        // 撞掉的格子从各自那一手里剔除
+        for (var k0 = 0; k0 < mine0.length; k0++) {
+          if (collisions.indexOf(mine0[k0]) >= 0) {
+            if (a === mine0[k0]) a = null;
+            if (a2 === mine0[k0]) a2 = null;
+          }
+        }
+        for (var k1 = 0; k1 < mine1.length; k1++) {
+          if (collisions.indexOf(mine1[k1]) >= 0) {
+            if (b === mine1[k1]) b = null;
+            if (b2 === mine1[k1]) b2 = null;
+          }
         }
       }
+
+      // 其余各归各
+      if (a != null) {
+        this.cells[a] = BLACK; this.placedAt[a] = this.round;
+        this.roundLog.push({ t: 'place', p: 0, cell: a, mode: 'hidden' });
+      }
+      if (a2 != null) {
+        this.cells[a2] = BLACK; this.placedAt[a2] = this.round;
+        this.roundLog.push({ t: 'place', p: 0, cell: a2, mode: 'hidden' });
+      }
+      if (b != null) {
+        this.cells[b] = WHITE; this.placedAt[b] = this.round;
+        this.roundLog.push({ t: 'place', p: 1, cell: b, mode: 'hidden' });
+      }
+      if (b2 != null) {
+        this.cells[b2] = WHITE; this.placedAt[b2] = this.round;
+        this.roundLog.push({ t: 'place', p: 1, cell: b2, mode: 'hidden' });
+      }
+      // ── 复生的绿 ×：对方踩中 → 那颗子变成我的 ──
+      // 必须放在「各归各」之后：先把对方的子写进格子，再整格改成我的，
+      // 否则随后那次写入会把子又盖回对方颜色。
+      this._greenFuHit([[a, a2], [b, b2]]);
       this.pending.hidden = [null, null];
+      this.pending.hidden2 = [null, null];
       this.pending.passed = [false, false];
+      this._tryLunhui();
       return this._endRound();
+    },
+
+    // 明轮踩中绿 ×：当场就变子。
+    // （暗轮那套要等两人都提交完才结算，是为了不泄露对方落在哪；明轮没有保密问题，
+    //   规格 SPEC_v2.md:242 要求「立刻抢过来」。之前只在暗轮结算里判，明轮等于白挂。）
+    _greenFuOpen: function (cell, byP) {
+      var owner = 1 - byP;
+      var g = this.greenFu[owner];
+      if (!g || g.cell !== cell) return false;
+      this.cells[cell] = owner + 1;
+      this.placedAt[cell] = this.round;      // 带当轮保护，本轮杀不动
+      this.greenSeq++;
+      this.greenFx.push({ id: this.greenSeq, cell: cell, p: owner });
+      this.roundLog.push({ t: 'greenfu', p: owner, cell: cell });
+      this.greenFu[owner] = null;            // 命中后绿 × 消失
+      return true;
+    },
+
+    // 绿 × 命中：谁踩中，那格就变成挂 × 那位的子（带当轮保护）。
+    // cellsByP[0] / cellsByP[1] = 各方这一手落的格子列表。
+    _greenFuHit: function (cellsByP) {
+      for (var owner = 0; owner < 2; owner++) {
+        var g = this.greenFu[owner];
+        if (!g) continue;
+        var oppCells = cellsByP[1 - owner], mine = cellsByP[owner];
+        for (var j = 0; j < oppCells.length; j++) {
+          var c = oppCells[j];
+          if (c == null || c !== g.cell) continue;
+          if (mine.indexOf(c) >= 0) continue;   // 两人同格 → 那是双撞，不归谁
+          this.cells[c] = owner + 1;
+          this.placedAt[c] = this.round;        // 带当轮保护，本轮杀不动
+          this.greenSeq++;
+          this.greenFx.push({ id: this.greenSeq, cell: c, p: owner });
+          this.roundLog.push({ t: 'greenfu', p: owner, cell: c });
+          this.greenFu[owner] = null;           // 命中后绿 × 消失
+          break;
+        }
+      }
     },
 
     // ── 商店（随时可买；盾只有暗轮能用）──────────────────────
@@ -750,8 +1130,14 @@
       if (this.over) throw new Error('game over');
       var it = itemOf(id);
       if (!it) throw new Error('no such item');
-      if (it.limit) {
-        var had = id === 'dan' ? this.danBought[p] : id === 'jing' ? this.jingBought[p] : 0;
+      // v2：混沌局不卖盾（暗轮一次暗选两子，盾没意义）
+      if (id === 'shield' && this.isChaos()) throw new Error('混沌局没有盾');
+      // 经：上限跟模式走（混沌 3 本，其他 1 本）
+      if (id === 'jing') {
+        var lim = modeOf(this.o.mode).jingLimit != null ? modeOf(this.o.mode).jingLimit : it.limit;
+        if (this.jingBought[p] >= lim) throw new Error('买到底了');
+      } else if (it.limit) {
+        var had = id === 'dan' ? this.danBought[p] : 0;
         if (had >= it.limit) throw new Error('买到底了');
       }
       if (this.coins[p] < it.price) throw new Error('not enough coins');
@@ -776,8 +1162,11 @@
         // 每方每轮想罩几块就罩几块：有盾、币够、这颗子还没罩，就允许。
         if (this.pending.hidden[p] != null) throw new Error('你已经暗落完了，不能再罩盾');
         if (cell == null) throw new Error('要点一颗自己的子');
-        if (this.cells[cell] !== p + 1) throw new Error('只能罩自己的子');
-        if (!(this.placedAt[cell] > 0 && this.placedAt[cell] < this.round)) throw new Error('刚落的子不能罩盾');
+        // 阴阳子既是自己的也是对方的 → 双方都能罩（先罩先得，两人同时罩效果一样）。
+        var isYY = this.cells[cell] === YINYANG;
+        if (this.cells[cell] !== p + 1 && !isYY) throw new Error('只能罩自己的子');
+        // 阴阳子的 placedAt 恒为 0（它不是谁落的子），要单独放行，否则永远罩不上。
+        if (!isYY && !(this.placedAt[cell] > 0 && this.placedAt[cell] < this.round)) throw new Error('刚落的子不能罩盾');
         if (this.isShielded(cell)) throw new Error('这颗子已经有盾了');
         this.items[p].splice(k, 1);
         this.shields.push({ cell: cell, p: p, roundsLeft: this.o.shieldOpens });
@@ -794,12 +1183,13 @@
         return this.qiCap[p];
       }
 
-      // 经：读一卷经，得技能「覆」。随时可读。
+      // 经：读一卷经 → 覆的可押次数 +1（v2：混沌局最多 3 次）。随时可读。
       if (id === 'jing') {
         this.items[p].splice(k, 1);
-        this.fuOwned[p] = true;
-        this.roundLog.push({ t: 'use', p: p, item: 'jing' });
-        return true;
+        this.fuCharges[p] += 1;
+        if (this.fuCharges[p] > this.fuMaxSeen[p]) this.fuMaxSeen[p] = this.fuCharges[p];
+        this.roundLog.push({ t: 'use', p: p, item: 'jing', charges: this.fuCharges[p] });
+        return this.fuCharges[p];
       }
 
       this.items[p].splice(k, 1);
@@ -830,25 +1220,45 @@
       var w = until - this.round;
       return w > 0 ? w : 0;
     },
-    // 这个玩家现在**拥有**的技能列表：弈士自带的 + 读过经才有「覆」。
+    // 这个玩家现在**拥有**的技能列表。
     // 用掉的分支直接从列表里消失（不标「用完」）：平用掉就没平，垂用掉就没垂，
     // 两支都用光，荒跟着一起没 —— 技能栏里剩下的就是你还能用的。
+    // v2：stage2 技能（寂灭 / 复生 / 暮礼）只在第二阶段出现；暮礼还要平和垂都光。
     skillsOf: function (p) {
       var src = this.champ[p].skills || [];
       var used = this.onceUsed[p];
       var bothGone = used.indexOf('ping') >= 0 && used.indexOf('chui') >= 0;
+      var s2 = this.inStage2();
       var out = [];
       for (var j = 0; j < src.length; j++) {
         var s0 = src[j];
         if ((s0.id === 'ping' || s0.id === 'chui') && used.indexOf(s0.id) >= 0) continue;
         if (s0.id === 'huang' && bothGone) continue;
+        if (s0.stage2 && !s2) continue;
+        if (s0.id === 'muli' && !bothGone) continue;
+        if (s0.id === 'jimie' && this.jimieUsed[p]) continue;
+        if (s0.id === 'fusheng' && this.fushengUsed[p]) continue;
+        // 拂尘升级后：充能用光就整个按钮消失（跟「用完即消失」一个口径，不标「用完」）。
+        if (s0.id === 'fuchen' && this.fuchenCharge[p] != null && this.fuchenCharge[p] <= 0) continue;
         out.push(s0);
       }
-      if (this.fuOwned[p] && !this.fuUsed[p]) {
+      // 覆：读了经才有，每本给一次押注。次数为 0 时整个按钮消失。
+      if (this.fuCharges[p] > 0) {
         out.push({
           id: 'fu', name: '覆', cd: 0, when: 'hidden', qi: 4, once: true,
-          desc: '暗轮里清空全部气（至少 4），点一格：点空格是盲猜对面落在哪，猜中那子碎；点对面一颗子则直接盯上它，结算时它碎（盾也挡不住）。只有一次机会。'
+          charges: this.fuCharges[p], showBadge: this.fuMaxSeen[p] > 1,
+          desc: '暗轮里扣 4 点气（气不够 4 点就用不了），点一格：点空格是盲猜对面落在哪，猜中那子碎；点对面一颗子则直接盯上它，结算时它碎（盾也挡不住）。同一个暗轮里可以连押好几格，每格各扣 4 点气。'
         });
+      }
+      // 拂尘升级：触发过轮回之后充能制（上限 3），显示次数角标。
+      if (this.fuchenCharge[p] != null) {
+        for (var f = 0; f < out.length; f++) {
+          if (out[f].id === 'fuchen') {
+            out[f].charge = this.fuchenCharge[p];
+            out[f].chargeMax = 3;
+            out[f].showBadge = true;
+          }
+        }
       }
       return out;
     },
@@ -857,12 +1267,31 @@
       if (this.over) return false;
       var sk = this.skillsOf(p)[k];
       if (!sk) return false;
-      // 用掉就没了：平 / 垂 各一次，覆 一次
+      // 用掉就没了：平 / 垂 各一次；寂灭 / 复生 各一次
       if ((sk.id === 'ping' || sk.id === 'chui') && this.onceUsed[p].indexOf(sk.id) >= 0) return false;
-      if (sk.id === 'fu' && this.fuUsed[p]) return false;
+      if (sk.id === 'jimie' && this.jimieUsed[p]) return false;
+      if (sk.id === 'fusheng' && this.fushengUsed[p]) return false;
+      if (sk.stage2 && !this.inStage2()) return false;
       // 荒 要吃掉一个还没用过的分支，两支都用光就用不出荒
       if (sk.id === 'huang') {
         if (this.onceUsed[p].indexOf('ping') >= 0 && this.onceUsed[p].indexOf('chui') >= 0) return false;
+      }
+      // 暮礼：正辩两支都得用光，并且这一轮还没用过
+      if (sk.id === 'muli') {
+        if (this.onceUsed[p].indexOf('ping') < 0 || this.onceUsed[p].indexOf('chui') < 0) return false;
+        if (this.muliUsedRound[p] === this.round) return false;
+      }
+      // 覆：得有次数（气也会被清空，所以气不够也放不了）
+      if (sk.id === 'fu' && this.fuCharges[p] <= 0) return false;
+      // 拂尘升级后：充能 0 就放不了
+      if (sk.id === 'fuchen' && this.fuchenCharge[p] != null && this.fuchenCharge[p] <= 0) return false;
+      // 寂灭：无门槛（0 币 0 气也能放）
+      if (sk.id === 'jimie') {
+        if (sk.when === 'open') {
+          if (this.phase === 'open-first') return this.first === p;
+          if (this.phase === 'open-second') return (1 - this.first) === p;
+          return false;
+        }
       }
       // 气不够就是「就绪但是灰的」
       var need = (sk.id === 'huang' || sk.id === 'fu') ? 4 : (sk.qi || 0);
@@ -884,6 +1313,14 @@
       var sk = this.skillsOf(p)[k];
       if (!sk) return;
       var slot = this._skSlot(p, sk);
+      // 拂尘升级后走「充能」而不是冷却：手里还有几点就能接着扫，
+      // 用完一点就少一点，靠充能慢慢涨回来。如果这里再压一道 3 轮冷却，
+      // 就会出现「角标显示还有 3 次、状态写着还 1 轮、按钮却是灰的」
+      // 这种自相矛盾（用户 m06811 报的就是这个）。
+      if (sk.id === 'fuchen' && this.fuchenCharge[p] != null) {
+        this.skillUsed[p]++;
+        return;
+      }
       if (slot >= 0) this.skillCdUntil[p][slot] = this.round + (sk.cd || 0);
       this.skillUsed[p]++;
     },
@@ -894,10 +1331,11 @@
       if (this.over) throw new Error('game over');
       if (!this.canUseSkill(p, k)) throw new Error('现在不能发动');
       var sk = this.skillsOf(p)[k];
-      // 正辩三支：发动 = 先「挂上」，等这一手真杀成了才兑现（不杀不消耗）。
+      // 正辩三支 + 暮礼：发动 = 先「挂上」，等这一手真杀成了才兑现（不杀不消耗）。
       // 荒 还要在这时选定「吃掉哪一支」（arg.eat = 'ping' | 'chui'），
       // 玩家想自己决定吃哪个，所以不自动挑 —— 由前端弹一次选择。
-      if (sk.id === 'ping' || sk.id === 'chui' || sk.id === 'huang') {
+      // 暮礼 要选方向（arg.dir = 'up' | 'down' | 'left' | 'right'）。
+      if (sk.id === 'ping' || sk.id === 'chui' || sk.id === 'huang' || sk.id === 'muli') {
         var armObj = { id: sk.id };
         if (sk.id === 'huang') {
           arg = arg || {};
@@ -906,27 +1344,81 @@
           if (this.onceUsed[p].indexOf(eat) >= 0) throw new Error('那一支已经用掉了');
           armObj.eat = eat;
         }
+        if (sk.id === 'muli') {
+          arg = arg || {};
+          var dir = arg.dir;
+          if (dir !== 'up' && dir !== 'down' && dir !== 'left' && dir !== 'right') throw new Error('暮礼要先选一个方向');
+          armObj.dir = dir;
+        }
         this.arm[p] = armObj;
-        this.roundLog.push({ t: 'arm', p: p, skill: sk.id, eat: armObj.eat || null });
+        this.roundLog.push({ t: 'arm', p: p, skill: sk.id, eat: armObj.eat || null, dir: armObj.dir || null });
         return sk.id;
       }
-      // 覆：两种用法 —— ①点空格盲猜对方这一手；②点对方一颗子，暗轮结算时抹除（连盾）。
+      // 覆：多种用法 —— ①点空格盲猜对方这一手；②点对方一颗子，暗轮结算时抹除（连盾）。
       // 两种都画 ×，× 只有自己看得见，暗轮结算就消失。× 相当于自己的禁入点。
+      // v2：同一个暗轮能连押好几格，每押一次扣一次「覆」的次数。
       if (sk.id === 'fu') {
         arg = arg || {};
         if (arg.cell == null) throw new Error('要选一格');
+        if (this.fuCharges[p] <= 0) throw new Error('覆已经用完了');
         var marked = this.cells[arg.cell];
+        var mode;
         if (marked === EMPTY) {
-          this.fuTarget[p] = 'guess';
+          mode = 'guess';
         } else if (marked === (1 - p) + 1) {
-          this.fuTarget[p] = 'kill';    // 子先留着，暗轮结算才碎（对方这期间还可能给它套盾）
+          mode = 'kill';    // 子先留着，暗轮结算才碎（对方这期间还可能给它套盾）
         } else {
           throw new Error('只能点空格或对方的子');
         }
-        this.fu[p] = arg.cell;
-        this.qi[p] -= Math.min(this.qi[p], 4);   // 清空全部气（至少 4）
-        this.fuUsed[p] = true;
-        this.roundLog.push({ t: 'fuCast', p: p, cell: arg.cell, mode: this.fuTarget[p] });
+        // 同一格不能押两次
+        for (var fj = 0; fj < this.fuMarks[p].length; fj++) {
+          if (this.fuMarks[p][fj].cell === arg.cell) throw new Error('这格已经押过了');
+        }
+        this.fuMarks[p].push({ cell: arg.cell, mode: mode });
+        this.fuList[p].push(arg.cell);
+        this.fuCharges[p] -= 1;                   // 每押一格扣一次
+        // 每押一格固定扣 4 气（用户 m05919：统一只扣 4，不清空、不随模式变）。
+        this.qi[p] -= Math.min(this.qi[p], 4);
+        this.roundLog.push({ t: 'fuCast', p: p, cell: arg.cell, mode: mode, left: this.fuCharges[p] });
+        return arg.cell;
+      }
+      // 寂灭（无锋）：耗尽全部币和气，三道雷各劈一格，劈中的东西直接变空白。
+      if (sk.id === 'jimie') {
+        if (this.jimieUsed[p]) throw new Error('这一局用过了');
+        this.jimieUsed[p] = true;
+        this.coins[p] = 0;
+        this.qi[p] = 0;
+        var n = this.cells.length, hits = [];
+        for (var t = 0; t < 3; t++) {
+          var cc = Math.floor(Math.random() * n);
+          this.cells[cc] = EMPTY;
+          this.placedAt[cc] = 0;
+          // 盾也被劈掉
+          for (var s2 = this.shields.length - 1; s2 >= 0; s2--) {
+            if (this.shields[s2].cell === cc) this.shields.splice(s2, 1);
+          }
+          hits.push(cc);
+        }
+        this._recountAsh();
+        this.jimieSeq++;
+        this.jimieFx.push({ id: this.jimieSeq, cells: hits, p: p });
+        this.roundLog.push({ t: 'skill', p: p, skill: 'jimie', cells: hits });
+        this._spendSkill(p, k);
+        return hits;
+      }
+      // 复生（山人）：气上限 +1、立刻 +2 气；同时点一格空白挂绿 ×（只自己可见、只禁自己）。
+      if (sk.id === 'fusheng') {
+        if (this.fushengUsed[p]) throw new Error('这一局用过了');
+        arg = arg || {};
+        if (arg.cell == null) throw new Error('要点一格空白');
+        if (this.cells[arg.cell] !== EMPTY) throw new Error('只能点空白处');
+        this.fushengUsed[p] = true;
+        this.qiCap[p] += 1;
+        this.qi[p] = Math.min(this.qiCap[p], this.qi[p] + 2);
+        // 绿 × 再顶一轮：这一轮 + 下一轮
+        this.greenFu[p] = { cell: arg.cell, until: this.round + 1 };
+        this.roundLog.push({ t: 'skill', p: p, skill: 'fusheng', cell: arg.cell, qiCap: this.qiCap[p] });
+        this._spendSkill(p, k);
         return arg.cell;
       }
       if (sk.id === 'fuchen') {
@@ -943,6 +1435,13 @@
         this.moveSeq++;
         this.moveFx.push({ id: this.moveSeq, from: from, to: to, p: p });
         this.roundLog.push({ t: 'skill', p: p, skill: 'fuchen', from: from, to: to });
+        // 升级后是充能制：用一次扣一格，并且冷却重新从 3 轮起算。
+        // （之前漏了扣减 → 充能永远不减，拂尘变无限次。）
+        if (this.fuchenCharge[p] != null) {
+          this.fuchenCharge[p] -= 1;
+          this.fuchenCd[p] = 3;
+          this.roundLog.push({ t: 'charge', p: p, skill: 'fuchen', left: this.fuchenCharge[p] });
+        }
         this._spendSkill(p, k);
         return to;
       }
@@ -991,9 +1490,26 @@
       if (this.round >= this.o.totalRounds) { this._finish('rounds'); return this.summary(); }
       this.round++;
       this.roundLog = [];
-      this.pending = { openFirst: null, hidden: [null, null], passed: [false, false] };
+      this.pending = { openFirst: null, hidden: [null, null], hidden2: [null, null], passed: [false, false] };
       this.first = null;
       this.gaveFirst = false;
+      this.frame = null;            // 5×5 框一轮一清
+      this.markN = 0;
+      this.markDone = [true, true];
+      // 复生绿 × 到期检查：顶过这一轮就散
+      for (var gp = 0; gp < 2; gp++) {
+        if (this.greenFu[gp] && this.round > this.greenFu[gp].until) this.greenFu[gp] = null;
+      }
+      // 拂尘升级后的充能：冷却 3 轮（明暗都在走），满了就 +1，上限 3。
+      for (var cp = 0; cp < 2; cp++) {
+        if (this.fuchenCharge[cp] == null) continue;
+        if (this.fuchenCharge[cp] >= 3) continue;
+        this.fuchenCd[cp] -= 1;
+        if (this.fuchenCd[cp] <= 0) {
+          this.fuchenCharge[cp] += 1;
+          this.fuchenCd[cp] = 3;
+        }
+      }
       this.auctionWinner = null;
       this.auctionHi = 0;
       this.auctionHiBy = null;
@@ -1006,6 +1522,7 @@
         this.roundMode = 'hidden';
         this.phase = 'hidden';
         this.pending.hidden = [null, null];
+        this.pending.hidden2 = [null, null];
         this.pending.passed = [false, false];
         this._flash('an');
       } else {
@@ -1070,7 +1587,7 @@
 
   return {
     Game: Game,
-    EMPTY: EMPTY, BLACK: BLACK, WHITE: WHITE, ASH: ASH,
+    EMPTY: EMPTY, BLACK: BLACK, WHITE: WHITE, ASH: ASH, YINYANG: YINYANG,
     blobsSizes: blobsSizes,
     blobCellsLargest: blobCellsLargest,
     compareBlobs: compareBlobs,
